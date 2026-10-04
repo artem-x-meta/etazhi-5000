@@ -1,0 +1,2168 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Floor 5000 / Этаж 5000 / 第5000层: a first-person walk to the corner store from the 5000th floor of an endless megastructure. One HTML file, no assets.">
+<title>Этаж 5000</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Rubik+Mono+One&display=swap">
+<style>
+/* Слой: полноэкранная 3D-сцена, поверх — HUD в духе табличек «Администрации Структуры». Один тёмный вид. */
+:root {
+  --bg: #0c0d10;
+  --fg: #ebe7df;          /* снег */
+  --dim: #a19d95;         /* мокрый бетон */
+  --accent: #c77dff;      /* неон «Пятёрочки» */
+  --amber: #e6b25a;       /* тёплые окна */
+  --panel: rgba(12, 13, 16, 0.74);
+  --line: rgba(235, 231, 223, 0.18);
+  --font-display: "Rubik Mono One", Impact, "Arial Black", sans-serif;
+  --font-body: "PT Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "PT Mono", "Courier New", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); }
+[hidden] { display: none !important; }
+body { font-family: var(--font-body); -webkit-user-select: none; user-select: none; touch-action: none; }
+#app { position: fixed; inset: 0; }
+#app canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.fx { position: absolute; inset: 0; pointer-events: none; }
+#fx-vignette { background: radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(0,0,0,.62) 100%); }
+#fx-grain { opacity: .045; background-size: 160px 160px; animation: grain .6s steps(4) infinite; }
+@keyframes grain { 0%{background-position:0 0} 25%{background-position:-40px 23px} 50%{background-position:31px -17px} 75%{background-position:-13px -41px} 100%{background-position:0 0} }
+#fade { background: #000; opacity: 1; transition: opacity 1.4s ease; }
+
+/* HUD */
+#hud { position: absolute; inset: 0; pointer-events: none; }
+#plate { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px));
+  display: grid; gap: 6px; padding: 10px 14px 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 2px; }
+#plate .floor { font-family: var(--font-display); font-size: 15px; letter-spacing: .06em; }
+#plate .meta { font-family: var(--font-mono); font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#tasks { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); top: calc(88px + env(safe-area-inset-top, 0px));
+  margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font-family: var(--font-mono); font-size: 13px; max-width: min(320px, 70vw); }
+#tasks li { display: flex; gap: 8px; align-items: baseline; text-shadow: 0 1px 3px #000; animation: rise .5s ease both; }
+#tasks li::before { content: ""; flex: none; width: 9px; height: 9px; border: 1.5px solid var(--fg); transform: translateY(1px); }
+#tasks li.done { color: var(--dim); text-decoration: line-through; text-decoration-color: rgba(161,157,149,.7); }
+#tasks li.done::before { background: var(--dim); border-color: var(--dim); }
+#inv { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(16px + env(safe-area-inset-top, 0px));
+  display: grid; gap: 4px; justify-items: end; text-align: right; max-width: 46vw; font-family: var(--font-mono); font-size: 13px; text-shadow: 0 1px 3px #000; }
+#inv .lbl { color: var(--dim); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; }
+#inv .paid { color: var(--fg); } #inv .unpaid { color: var(--amber); }
+#cross { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--fg); opacity: .75; box-shadow: 0 0 2px #000; }
+#cross.on { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: transparent; border: 1.5px solid var(--accent); opacity: 1; }
+#prompt { position: absolute; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
+  font-family: var(--font-mono); font-size: 14px; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+kbd { font-family: var(--font-mono); font-size: 12px; padding: 1px 7px; border: 1px solid var(--fg); border-bottom-width: 3px; border-radius: 3px; background: rgba(0,0,0,.45); color: var(--fg); }
+#thought { position: absolute; left: 50%; bottom: calc(14vh + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100vw - 32px));
+  text-align: center; font-style: italic; font-size: clamp(17px, 2.3vw, 22px); line-height: 1.4; text-wrap: balance; text-shadow: 0 1px 4px #000, 0 0 18px rgba(0,0,0,.8);
+  opacity: 0; transition: opacity .6s ease; }
+#thought.show { opacity: 1; }
+#hud.cine > :not(#thought) { opacity: 0; transition: opacity 1.2s ease; }
+#hud.talking #touch, #hud.talking #thought, #hud.talking #prompt { visibility: hidden; }
+#hud.paused { visibility: hidden; }
+#dialog { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(640px, calc(100vw - 32px));
+  padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); pointer-events: auto; display: grid; gap: 10px; }
+#dialog .who { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+#dialog .text { font-size: 18px; line-height: 1.45; white-space: pre-line; }
+#dialog .opts { display: grid; gap: 6px; }
+#dialog button, .screen button { font: inherit; color: var(--fg); cursor: pointer; }
+#dialog .opts button { text-align: left; font-family: var(--font-mono); font-size: 14px; padding: 7px 10px; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 2px; }
+#dialog .opts button:hover, #dialog .opts button:focus-visible { border-color: var(--accent); background: rgba(199,125,255,.1); outline: none; }
+#dialog .opts button b { color: var(--accent); font-weight: 400; margin-right: 8px; }
+#dialog .cont { font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+
+/* Тач-управление */
+#touch { position: absolute; inset: 0; pointer-events: none; }
+#stick { position: absolute; left: calc(28px + env(safe-area-inset-left, 0px)); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); width: 120px; height: 120px;
+  border: 1.5px solid var(--line); border-radius: 50%; background: rgba(0,0,0,.2); }
+#knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(235,231,223,.35); }
+#touch button { position: absolute; pointer-events: auto; width: 64px; height: 64px; border-radius: 50%; border: 1.5px solid var(--line);
+  background: rgba(0,0,0,.35); color: var(--fg); font-family: var(--font-mono); font-size: 15px; }
+#t-act { right: calc(28px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); border-color: var(--accent) !important; }
+#t-run { right: calc(104px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); font-size: 12px !important; }
+#t-run.on { background: rgba(199,125,255,.3); }
+
+/* Экраны */
+.screen { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(8,9,11,.92) 0%, rgba(8,9,11,.55) 45%, rgba(8,9,11,0) 75%); }
+.screen .card { width: min(560px, 100%); display: grid; gap: 14px; padding: 0 0 clamp(8px, 4vh, 40px) clamp(0px, 3vw, 40px); }
+.eyebrow { margin: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.screen h1, .screen h2 { margin: 0; font-family: var(--font-display); font-weight: 400; line-height: .95; letter-spacing: .01em; text-wrap: balance; }
+.screen h1 { font-size: clamp(44px, 9vw, 96px); }
+.screen h1 .num { font-family: "Rubik Mono One", Impact, sans-serif; color: var(--accent); text-shadow: 0 0 24px rgba(199,125,255,.55); }
+.screen h2 { font-size: clamp(36px, 7vw, 72px); white-space: pre-line; }
+.langs { display: flex; flex-wrap: wrap; gap: 6px; }
+.langs button { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; padding: 5px 11px; color: var(--dim); background: rgba(0,0,0,.35);
+  border: 1px solid var(--line); border-radius: 2px; cursor: pointer; }
+.langs button:hover { color: var(--fg); border-color: var(--fg); }
+.langs button[aria-pressed="true"] { color: #140a1c; background: var(--accent); border-color: var(--accent); }
+.langs button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+/* китайский: CJK-шрифты (грузятся по выбору языка), без курсива и капса-разрядки */
+:root:lang(zh) { --font-display: "ZCOOL QingKe HuangYou", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  --font-mono: "PT Mono", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", monospace; }
+:root:lang(zh) #thought { font-style: normal; }
+:root:lang(zh) .eyebrow, :root:lang(zh) #inv .lbl, :root:lang(zh) #dialog .who { letter-spacing: .04em; }
+.lede { margin: 0; font-size: clamp(16px, 2vw, 19px); line-height: 1.5; max-width: 46ch; color: var(--fg); }
+.keys { margin: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 18px; font-family: var(--font-mono); font-size: 13px; }
+.keys div { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.keys dt { flex: none; min-width: 64px; color: var(--fg); } .keys dd { margin: 0; color: var(--dim); }
+.row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 6px; }
+.screen button.main { font-family: var(--font-mono); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; padding: 12px 20px;
+  background: var(--accent); color: #140a1c; border: 0; border-radius: 2px; box-shadow: 0 0 28px rgba(199,125,255,.35); }
+.screen button.main:hover { filter: brightness(1.1); }
+.screen button.main:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.hint { font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+#end-stats { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+#end-stats dt { color: var(--dim); } #end-stats dd { margin: 0; }
+#ending { background: rgba(0,0,0,.86); align-items: center; }
+#ending .card > * { animation: rise 1s ease both; }
+#ending .card > :nth-child(2) { animation-delay: .8s; } #ending .card > :nth-child(3) { animation-delay: 1.8s; }
+#ending .card > :nth-child(4) { animation-delay: 2.8s; } #ending .card > :nth-child(5) { animation-delay: 3.6s; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 560px) {
+  #tasks { font-size: 12px; top: calc(82px + env(safe-area-inset-top, 0px)); }
+  #inv { font-size: 12px; }
+  #dialog .text { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { #fx-grain { animation: none; } #tasks li, #ending .card > * { animation: none; } }
+</style>
+
+</head><body>
+<div id="app">
+  <div id="fx-vignette" class="fx"></div>
+  <div id="fx-grain" class="fx"></div>
+  <div id="hud" hidden>
+    <div id="plate"><div class="floor" data-i18n="hud.floor">ЭТАЖ 5000</div><div class="meta"><span id="clock">18:40</span> · <span id="money">350 ₽</span></div></div>
+    <ul id="tasks"></ul>
+    <div id="inv"></div>
+    <div id="cross"></div>
+    <div id="prompt" hidden><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
+    <div id="thought"></div>
+    <div id="dialog" hidden><div class="who"></div><div class="text"></div><div class="opts"></div><div class="cont"></div></div>
+    <div id="touch" hidden><div id="stick"><div id="knob"></div></div><button id="t-act" type="button">E</button><button id="t-run" type="button" data-i18n="touch.run">Бег</button></div>
+  </div>
+  <div id="fade" class="fx"></div>
+  <section id="title" class="screen">
+    <div class="card">
+      <div class="langs" role="group" aria-label="Язык" data-i18n-aria="lang.label"><button type="button" data-lang="ru" aria-pressed="true">RU</button><button type="button" data-lang="en" aria-pressed="false">EN</button><button type="button" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div>
+      <p class="eyebrow" data-i18n="title.eyebrow">Структура · секция 5000 · кв. 20000</p>
+      <h1 id="title-h1">Этаж<br><span class="num">5000</span></h1>
+      <p class="lede" data-i18n="title.lede">Вечер, метель. Дома ни крошки. До «Пятёрочки» — тамбур, галерея и пролёт ржавой лестницы над пропастью без дна.</p>
+      <dl class="keys">
+        <div><dt>WASD</dt><dd>идти</dd></div>
+        <div><dt>Мышь</dt><dd>смотреть</dd></div>
+        <div><dt>Shift</dt><dd>быстрее</dd></div>
+        <div><dt>E, клик</dt><dd>действие</dd></div>
+        <div><dt>1 2 3</dt><dd>ответы</dd></div>
+        <div><dt>Esc</dt><dd>пауза</dd></div>
+      </dl>
+      <div class="row"><button id="start" class="main" type="button" data-i18n="title.start">Начать</button><span class="hint" id="start-hint">со звуком атмосфернее</span></div>
+    </div>
+  </section>
+  <section id="pause" class="screen" hidden>
+    <div class="card">
+      <div class="langs" role="group" aria-label="Язык" data-i18n-aria="lang.label"><button type="button" data-lang="ru" aria-pressed="true">RU</button><button type="button" data-lang="en" aria-pressed="false">EN</button><button type="button" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div>
+      <p class="eyebrow" data-i18n="pause.eyebrow">Пауза</p>
+      <h2 data-i18n="pause.h2">Стоишь
+и думаешь</h2>
+      <div class="row"><button id="resume" class="main" type="button" data-i18n="pause.resume">Продолжить</button><span class="hint" data-i18n="pause.hint">Esc — пауза</span></div>
+    </div>
+  </section>
+  <section id="ending" class="screen" hidden>
+    <div class="card">
+      <p class="eyebrow" data-i18n="end.eyebrow">Кв. 20000 · этаж 5000</p>
+      <h2 data-i18n="end.h2">Хрусть.</h2>
+      <p class="lede" id="end-text">За окном всё так же идёт снег. Где-то внизу, говорят, есть земля.</p>
+      <dl id="end-stats"></dl>
+      <div class="row"><button id="again" class="main" type="button" data-i18n="end.again">Сходить ещё раз</button></div>
+    </div>
+  </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.149.0/three.min.js"></script>
+<script>
+(function () {
+'use strict';
+// ================= Локализация: RU / EN / 中文 =================
+// Вывески внутри мира остаются на кириллице (это русская Структура);
+// переводится всё, что читает игрок: интерфейс, мысли, диалоги, подписи действий.
+const L10N = {};
+const LANGS = { ru: { html: 'ru', name: 'RU' }, en: { html: 'en', name: 'EN' }, zh: { html: 'zh-Hans', name: '中文' } };
+let LANG = 'ru';
+
+// tr('ключ', ...аргументы): строка, функция-шаблон или массив вариантов. Нет перевода — берём русский.
+function tr(key, ...args) {
+  const v = (L10N[LANG] && key in L10N[LANG]) ? L10N[LANG][key] : L10N.ru[key];
+  if (v === undefined) return key;
+  return typeof v === 'function' ? v(...args) : v;
+}
+const pick = key => { const a = tr(key); return a[(Math.random() * a.length) | 0]; };
+// название предмета в инвентаре — по id, чтобы смена языка переводила и купленное
+const itemName = i => i.kind === 'chips' ? tr('chips.name', tr('chips.' + i.v)) : tr('soda.' + i.v);
+
+function detectLang() {
+  try { const s = localStorage.getItem('f5k-lang'); if (s && LANGS[s]) return s; } catch (e) { /* хранилище недоступно */ }
+  for (const l of navigator.languages || [navigator.language || '']) {
+    const p = String(l).toLowerCase().slice(0, 2);
+    if (LANGS[p]) return p;
+  }
+  return 'en';
+}
+
+let zhFonts = false;
+function setLang(code, save) {
+  if (!LANGS[code]) return;
+  LANG = code;
+  document.documentElement.lang = LANGS[code].html;
+  document.title = tr('doc.title');
+  if (code === 'zh' && !zhFonts) { // китайские шрифты грузим только когда нужны
+    zhFonts = true;
+    const l = document.createElement('link'); l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=ZCOOL+QingKe+HuangYou&display=swap';
+    document.head.append(l);
+  }
+  if (save) { try { localStorage.setItem('f5k-lang', code); } catch (e) { /* не страшно */ } }
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = tr(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', tr(el.dataset.i18nAria));
+  for (const b of document.querySelectorAll('.langs button')) b.setAttribute('aria-pressed', String(b.dataset.lang === code));
+  renderTitleH1(); renderKeys();
+  langChanged(); // HUD, задачи, финальный экран — в p7_main.js
+}
+
+function renderTitleH1() {
+  const h = document.getElementById('title-h1'), p = tr('title.h1');
+  h.textContent = '';
+  const num = document.createElement('span'); num.className = 'num'; num.textContent = '5000';
+  h.append(p.a); if (p.br) h.append(document.createElement('br')); h.append(num, p.b);
+}
+function renderKeys() {
+  const dl = document.querySelector('#title .keys'); dl.textContent = '';
+  for (const [a, b] of tr(touchModeEarly() ? 'title.keysTouch' : 'title.keys')) {
+    const d = document.createElement('div'), x = document.createElement('dt'), y = document.createElement('dd');
+    x.textContent = a; y.textContent = b; d.append(x, y); dl.append(d);
+  }
+  document.getElementById('start-hint').textContent = tr(touchModeEarly() ? 'title.hintTouch' : 'title.hint');
+}
+const touchModeEarly = () => matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
+
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.langs button');
+  if (b) setLang(b.dataset.lang, true);
+});
+// ---------- русский (исходный) ----------
+L10N.ru = {
+  'doc.title': 'Этаж 5000',
+  'hud.floor': 'ЭТАЖ 5000',
+  'lang.label': 'Язык',
+  'title.eyebrow': 'Структура · секция 5000 · кв. 20000',
+  'title.h1': { a: 'Этаж', br: true, b: '' },
+  'title.lede': 'Вечер, метель. Дома ни крошки. До «Пятёрочки» — тамбур, галерея и пролёт ржавой лестницы над пропастью без дна.',
+  'title.keys': [['WASD', 'идти'], ['Мышь', 'смотреть'], ['Shift', 'быстрее'], ['E, клик', 'действие'], ['1 2 3', 'ответы'], ['Esc', 'пауза']],
+  'title.keysTouch': [['Слева', 'идти'], ['Справа', 'смотреть'], ['Тап, E', 'действие'], ['Бег', 'быстрее']],
+  'title.start': 'Начать',
+  'title.hint': 'со звуком атмосфернее',
+  'title.hintTouch': 'в наушниках атмосфернее',
+  'pause.eyebrow': 'Пауза',
+  'pause.h2': 'Стоишь\nи думаешь',
+  'pause.resume': 'Продолжить',
+  'pause.hint': 'Esc — пауза',
+  'end.eyebrow': 'Кв. 20000 · этаж 5000',
+  'end.h2': 'Хрусть.',
+  'end.text': 'За окном всё так же идёт снег. Где-то внизу, говорят, есть земля.',
+  'end.textDown': 'За окном всё так же идёт снег. Дна ты так и не увидел. Никто не видел.',
+  'end.again': 'Сходить ещё раз',
+  'end.time': 'Время в пути', 'end.dist': 'Пройдено', 'end.spent': 'Потрачено', 'end.loot': 'Добыто', 'end.floor': 'Этаж',
+  'end.floorVal': '5000, без изменений',
+  'fmt.time': (m, s) => `${m} мин ${s} с`,
+  'fmt.dist': d => `${d} м`,
+  'fmt.thought': t => '— ' + t,
+  'fmt.say': (who, text) => `${who}: «${text}»`,
+  'list.sep': ', ',
+  'touch.run': 'Бег',
+  'prompt.tap': 'тап',
+  'dlg.choose': 'Выбери ответ',
+  'dlg.press': n => `Нажми 1–${n}`,
+  'dlg.tap': 'Коснись, чтобы продолжить',
+  'dlg.next': 'E, пробел или клик — дальше',
+  'inv.bag': 'В пакете', 'inv.hands': 'В руках', 'inv.unpaid': ' · не оплачено',
+  'task.store': 'Сходить в «Пятёрочку» этажом выше',
+  'task.chips': 'Взять чипсы', 'task.soda': 'Взять газировку', 'task.pay': 'Оплатить на кассе',
+  'task.home': 'Вернуться в кв. 20000', 'task.sofa': 'Устроиться на диване с чипсами',
+  'mute.on': 'Тишина. Только снег.', 'mute.off': 'Звук вернулся.',
+  'intro.1': 'Вечер. Метель. Хочется чипсов.',
+  'intro.2': 'И газировки. Холодной.',
+  'intro.3': 'Дома, конечно, пусто. Значит, в «Пятёрочку» — она этажом выше, на мосту.',
+  'z.jacket': 'Куртку накинул, ключи в кармане. Пошёл.',
+  'z.corr': 'В коридоре опять мигает лампочка. Стабильность.',
+  'z.lift': 'Лифт не работает с 4970-го. Ладно, «Пятёрочка» всего этажом выше — через галерею и наружную лестницу.',
+  'z.pass': 'Пять тысяч. Круглое число. Лифту всё равно.',
+  'z.out': 'Ух. Ветер с нижних этажей.',
+  'z.stairs': 'Ступеньки ржавые. Наверное, ровесники Структуры.',
+  'z.deck': 'Светится. Значит, работает.',
+  'z.store': 'Тепло. Пахнет хлебом и мандаринами.',
+  'z.leaveBag': 'Пакет шуршит. Жизнь налаживается.',
+  'z.leaveHands': 'Чипсы в одной руке, газировка в другой. Как рыцарь.',
+  'z.almost': 'Почти дома. Снег на куртке тает.',
+  'z.home': 'Дома. Теперь — на диван, к окну.',
+  'z.lookDown': 'Не смотри вниз… Посмотрел. Дна всё так же не видно.',
+  'z.fell': 'Чуть не улетел. Тут падать дольше, чем жить.',
+  'hint.door': 'Дверь в коридор — за спиной, у вешалки.',
+  'hint.pass': 'Выход на галерею — через тамбур с «5000» на стене.',
+  'hint.ext': 'Дверь на галерею железная. Открывается наружу.',
+  'act.rail': 'Потрогать перила', 'th.rail': 'Перила ледяные. Пальцы прилипают.',
+  'act.service': 'Подёргать дверь', 'th.service': 'Заперто. За дверью кто-то кашляет.',
+  'act.poster': 'Прочитать плакат', 'th.poster': '«Работаем круглосуточно. Даже когда лифт не работает». Утешает.',
+  'door.open': 'Открыть дверь', 'door.close': 'Закрыть дверь', 'door.ext': 'Открыть дверь на галерею',
+  'act.knock': n => `Постучать в кв. ${n}`,
+  'nb.19997': 'Из-за двери пахнет жареной картошкой. Никто не открывает.',
+  'nb.19998': 'Тишина. Там тихо уже лет десять.',
+  'nb.19999': 'За дверью кто-то сверлит. Как всегда, в восемь вечера.',
+  'nb.19996': '«Кто там?» — «Сосед». — «Какой ещё сосед?» Ладно.',
+  'act.lift': 'Вызвать лифт', 'th.lift': 'Тишина. Где-то глубоко внизу что-то скрипнуло. Лифт не работает с 4970-го.',
+  'act.button': 'Нажать кнопку', 'th.button': 'Кнопка даже не загорается.',
+  'act.notice': 'Прочитать объявление', 'notice.who': 'Объявление',
+  'notice.text': 'Уважаемые жильцы этажей 4900–5100!\nС 1 октября по 30 июня горячей воды не будет. Плановая профилактика.\nЛифт: ремонт ведётся. Ориентировочный срок — 2031 г.\nНе выбрасывайте в мусоропровод крупногабарит: он не долетает.\n— Администрация Структуры',
+  'notice.who2': 'Объявление пониже', 'notice.text2': 'КУПЛЮ ГАРАЖ на 1-м этаже. Дорого.',
+  'act.chute': 'Открыть мусоропровод', 'th.chute': 'Из трубы тянет холодом. Говорят, мусор долетает до низа за неделю.',
+  'act.window': 'Посмотреть в окно',
+  'th.window': 'Снег. Где-то там внизу, говорят, есть земля. Никто не проверял.',
+  'th.windowPaid': 'Где-то там светится «Пятёрочка». Спасибо ей.',
+  'act.cactus': 'Кактус', 'th.cactus': 'Кактус. Единственный, кто меня понимает. Поливать раз в квартал.',
+  'act.sofaEnd': 'Устроиться с чипсами', 'act.sofa': 'Сесть на диван', 'th.sofa': 'Сначала чипсы. Диван подождёт.',
+  'act.carpet': 'Ковёр', 'th.carpet': 'Ковёр. Висел тут ещё до меня. Возможно, и до Структуры.',
+  'act.monitor': 'Посмотреть на монитор', 'th.monitor': 'Билд ещё идёт. 147 из 412. Как раз успею за чипсами.',
+  'act.fridge': 'Открыть холодильник', 'th.fridge': 'Половинка лимона, горчица и свет. Свет хотя бы бесплатный.',
+  'act.tv': 'Телевизор', 'th.tv': 'По телевизору снег. За окном снег. Стабильность.',
+  'act.counter': 'Подойти к кассе', 'act.cashier': 'Поговорить с кассиром', 'act.guard': 'Охранник', 'act.goods': 'Посмотреть товары',
+  'shelfA': ['Сухарики «Этажные». Не то.', 'Печенье «Юбилейное, 5000». Не сегодня.', 'Семечки. Это на потом.'],
+  'shelfB': ['Макароны. Нет, я за чипсами.', 'Хлеб с пекарни на 4980-м. Ещё тёплый, говорят.', 'Гречка. Стратегический запас Структуры.'],
+  'act.chips': v => `Взять «Хруст», ${v}`, 'act.chipsEnough': 'Одной пачки хватит',
+  'chips.sour': 'сметана и зелень', 'chips.crab': 'краб', 'chips.bacon': 'бекон',
+  'chips.name': v => `«Хруст», ${v}`,
+  'th.chips.sour': 'Сметана и зелень. Почти салат.', 'th.chips.crab': 'Краб. Классика. Краба там, конечно, нет.', 'th.chips.bacon': 'Бекон. Сегодня можно.',
+  'th.chipsEnough': 'Одной пачки хватит. Или нет? Нет, хватит.',
+  'act.soda': 'Взять газировку', 'act.sodaHave': 'Газировка уже есть', 'th.sodaHave': 'Газировка уже есть. Холодная, рука мёрзнет.',
+  'fridge.who': 'Холодильник', 'fridge.ask': 'Стекло запотело. Какую?',
+  'soda.tarkhun': 'Тархун', 'soda.buratino': 'Буратино', 'soda.cola': 'Кола «Народная»',
+  'sodaOpt.tarkhun': 'Тархун', 'sodaOpt.buratino': 'Буратино', 'sodaOpt.cola': 'Кола «Народная»',
+  'th.soda.tarkhun': 'Тархун. Зелёный, как в детстве.', 'th.soda.buratino': 'Буратино. Вкус, который не объяснить.', 'th.soda.cola': 'Кола «Народная». Народ одобряет.',
+  'act.fridgeOther': 'Холодильник',
+  'fridgeLines': ['Кефир. Полезно, но не сегодня.', 'Сок «Вертикальный». Звучит тревожно.', 'Молоко с фермы на 3000-м этаже. Коровы там, видимо, тоже есть.'],
+  'act.water': 'Вода по акции', 'th.water': 'Вода «Родник 5000-го этажа». Откуда на 5000-м этаже родник?',
+  'act.baba': 'Бабушка', 'baba.who': 'Бабушка',
+  'baba.q': 'Сынок, не знаешь, лифт на четыре тыщи девятьсот работает?',
+  'baba.o1': 'Не знаю, бабуль', 'baba.a1': 'Никто не знает. Пешком пойду, с Богом.',
+  'baba.o2': 'У нас с 4970-го не работает', 'baba.a2': 'Ох. А мне на 4321-й… Ну ничего, к лету дойду.',
+  'baba.again': 'Картошка нынче мелкая. Вот раньше, на двухтысячном, была картошка — во!',
+  'guard.who': 'Охранник',
+  'guard.lines': ['Проходим, не задерживаемся.', 'Я тут с 4900-го работаю. Ни разу не присел. Ну, почти.', 'Снег, говорят, до весны. А весны, говорят, не будет.', 'Лифт? Какой лифт?'],
+  'guard.watch': 'Касса — там. Я слежу.', 'guard.stop': 'Молодой человек! А на кассу?',
+  'cash.who': 'Кассир', 'cash.more': 'Что-то ещё?', 'cash.moreNo': 'Нет, спасибо. Хорошего вечера',
+  'cash.nothing': 'Молодой человек, вы что-то берёте?',
+  'you.who': 'Ты', 'you.hint': '(Сначала надо что-нибудь взять. Чипсы — на стеллаже справа, газировка — в холодильниках у дальней стены.)',
+  'cash.bag': 'Здравствуйте. Пакет нужен?', 'cash.bagYes': 'Да, давайте', 'cash.bagNo': 'Нет, так донесу',
+  'cash.card': 'Карта магазина есть?', 'cash.cardNo': 'Нет', 'cash.cardHome': 'Дома забыл',
+  'cash.cardHomeA': 'Все дома забывают. Дом-то у всех тут, рядом.',
+  'cash.bagItem': 'пакет',
+  'cash.total': (items, sum) => `${items}.\nС вас ${sum} ₽. Картой или наличными?`,
+  'cash.payCard': 'Картой', 'term.who': 'Терминал', 'term.ok': 'Приложите карту… Одобрено.',
+  'cash.payCash': 'Наличными', 'cash.smaller': 'А помельче не будет?', 'cash.only500': 'Только пятисотка',
+  'cash.change': 'Ох. Ладно, наскребу сдачу.',
+  'cash.bye': 'Приходите ещё. На лестнице осторожнее — скользко.',
+  'th.needSoda': 'Ещё газировку взять. Холодильники — у дальней стены.',
+  'th.needChips': 'Ещё чипсы. Стеллаж справа от прохода.',
+};
+// ---------- English ----------
+L10N.en = {
+  'doc.title': 'Floor 5000',
+  'hud.floor': 'FLOOR 5000',
+  'lang.label': 'Language',
+  'title.eyebrow': 'The Structure · Section 5000 · Apt. 20000',
+  'title.h1': { a: 'Floor', br: true, b: '' },
+  'title.lede': 'Evening. Blizzard. Not a crumb in the house. Between you and the Pyaterochka corner store: a vestibule, a gallery and one flight of rusty stairs over a bottomless drop.',
+  'title.keys': [['WASD', 'walk'], ['Mouse', 'look'], ['Shift', 'faster'], ['E, click', 'interact'], ['1 2 3', 'answers'], ['Esc', 'pause']],
+  'title.keysTouch': [['Left side', 'walk'], ['Right side', 'look'], ['Tap, E', 'interact'], ['Run', 'faster']],
+  'title.start': 'Start',
+  'title.hint': 'better with sound on',
+  'title.hintTouch': 'best with headphones',
+  'pause.eyebrow': 'Paused',
+  'pause.h2': 'Lost\nin thought',
+  'pause.resume': 'Resume',
+  'pause.hint': 'Esc to pause',
+  'end.eyebrow': 'Apt. 20000 · Floor 5000',
+  'end.h2': 'Crunch.',
+  'end.text': 'Snow keeps falling outside. Somewhere far below, they say, there is ground.',
+  'end.textDown': 'Snow keeps falling outside. You never saw the bottom. Nobody has.',
+  'end.again': 'Go again',
+  'end.time': 'Trip time', 'end.dist': 'Distance', 'end.spent': 'Spent', 'end.loot': 'Haul', 'end.floor': 'Floor',
+  'end.floorVal': '5000, unchanged',
+  'fmt.time': (m, s) => `${m} min ${s} s`,
+  'fmt.dist': d => `${d} m`,
+  'fmt.thought': t => t,
+  'fmt.say': (who, text) => `${who}: “${text}”`,
+  'list.sep': ', ',
+  'touch.run': 'Run',
+  'prompt.tap': 'tap',
+  'dlg.choose': 'Pick an answer',
+  'dlg.press': n => `Press 1–${n}`,
+  'dlg.tap': 'Tap to continue',
+  'dlg.next': 'E, Space or click to continue',
+  'inv.bag': 'In the bag', 'inv.hands': 'In hand', 'inv.unpaid': ' · not paid',
+  'task.store': 'Go to Pyaterochka, one floor up',
+  'task.chips': 'Grab chips', 'task.soda': 'Grab a soda', 'task.pay': 'Pay at the checkout',
+  'task.home': 'Go back to apt. 20000', 'task.sofa': 'Settle on the couch with the chips',
+  'mute.on': 'Silence. Just snow.', 'mute.off': 'Sound is back.',
+  'intro.1': 'Evening. Blizzard. I want chips.',
+  'intro.2': 'And a soda. A cold one.',
+  'intro.3': 'Nothing at home, of course. So it’s Pyaterochka. One floor up, on the bridge.',
+  'z.jacket': 'Jacket on, keys in my pocket. Let’s go.',
+  'z.corr': 'The hallway bulb is flickering again. Stability.',
+  'z.lift': 'The elevator’s been dead since floor 4970. Fine. Pyaterochka is just one floor up: out to the gallery and up the outside stairs.',
+  'z.pass': 'Five thousand. A nice round number. The elevator doesn’t care.',
+  'z.out': 'Whoa. Wind coming up from the lower floors.',
+  'z.stairs': 'Rusty steps. Probably as old as the Structure.',
+  'z.deck': 'The lights are on. So it’s open.',
+  'z.store': 'Warm in here. Smells of bread and tangerines.',
+  'z.leaveBag': 'The bag rustles. Life is looking up.',
+  'z.leaveHands': 'Chips in one hand, soda in the other. Like a knight.',
+  'z.almost': 'Almost home. The snow on my jacket is melting.',
+  'z.home': 'Home. Now: the couch, by the window.',
+  'z.lookDown': 'Don’t look down… Looked. Still no bottom in sight.',
+  'z.fell': 'Nearly went over. Falling here takes longer than a lifetime.',
+  'hint.door': 'The door to the hallway is behind me, by the coat hook.',
+  'hint.pass': 'The way out to the gallery is through the vestibule with “5000” on the wall.',
+  'hint.ext': 'The gallery door is the metal one. It opens outward.',
+  'act.rail': 'Touch the railing', 'th.rail': 'The railing is ice-cold. My fingers stick to it.',
+  'act.service': 'Try the door', 'th.service': 'The sign says “Staff only”. Locked. Someone is coughing behind it.',
+  'act.poster': 'Read the poster', 'th.poster': '“Open 24/7. Even when the elevator isn’t.” Comforting.',
+  'door.open': 'Open the door', 'door.close': 'Close the door', 'door.ext': 'Open the door to the gallery',
+  'act.knock': n => `Knock on apt. ${n}`,
+  'nb.19997': 'Smells of fried potatoes in there. Nobody answers.',
+  'nb.19998': 'Silence. It’s been silent in there for about ten years.',
+  'nb.19999': 'Someone is drilling in there. As always, at 8 p.m.',
+  'nb.19996': '“Who’s there?” “Your neighbor.” “What neighbor?” Okay then.',
+  'act.lift': 'Call the elevator',
+  'th.lift': 'Nothing. Something creaks far, far below. The sign says “OUT OF ORDER”: it’s been dead since floor 4970.',
+  'act.button': 'Press the button', 'th.button': 'The button doesn’t even light up.',
+  'act.notice': 'Read the notice', 'notice.who': 'Notice',
+  'notice.text': 'Dear residents of floors 4900–5100!\nThere will be no hot water from October 1 to June 30. Scheduled maintenance.\nElevator: repairs are underway. Estimated completion: 2031.\nDo not throw bulky items down the garbage chute: they never reach the bottom.\n— The Structure Administration',
+  'notice.who2': 'A note pinned below', 'notice.text2': 'WILL BUY A GARAGE on the 1st floor. Paying well.',
+  'act.chute': 'Open the garbage chute', 'th.chute': 'Cold air rises from the chute. They say trash takes a week to hit the bottom.',
+  'act.window': 'Look out the window',
+  'th.window': 'Snow. Somewhere down there, they say, is the ground. Nobody has checked.',
+  'th.windowPaid': 'Pyaterochka is glowing out there somewhere. Thank you, Pyaterochka.',
+  'act.cactus': 'Cactus', 'th.cactus': 'The cactus. The only one who understands me. Water once a quarter.',
+  'act.sofaEnd': 'Settle in with the chips', 'act.sofa': 'Sit on the couch', 'th.sofa': 'Chips first. The couch can wait.',
+  'act.carpet': 'Wall rug', 'th.carpet': 'The wall rug. It hung here before me. Maybe before the Structure, too.',
+  'act.monitor': 'Look at the monitor', 'th.monitor': 'The build is still running. 147 of 412. Just enough time for a chips run.',
+  'act.fridge': 'Open the fridge', 'th.fridge': 'Half a lemon, mustard and a light. At least the light is free.',
+  'act.tv': 'TV', 'th.tv': 'Snow on the TV. Snow outside. Stability.',
+  'act.counter': 'Go to the checkout', 'act.cashier': 'Talk to the cashier', 'act.guard': 'Security guard', 'act.goods': 'Look at the shelf',
+  'shelfA': ['“Floor Rusks” crackers. Not it.', '“Jubilee 5000” cookies. Not today.', 'Sunflower seeds. That’s for later.'],
+  'shelfB': ['Pasta. No, I’m here for chips.', 'Bread from the bakery on 4980. Still warm, they say.', 'Buckwheat. The Structure’s strategic reserve.'],
+  'act.chips': v => `Take Khrust chips, ${v}`, 'act.chipsEnough': 'One bag is enough',
+  'chips.sour': 'sour cream & herbs', 'chips.crab': 'crab', 'chips.bacon': 'bacon',
+  'chips.name': v => `Khrust chips, ${v}`,
+  'th.chips.sour': 'Sour cream & herbs. Basically a salad.', 'th.chips.crab': 'Crab. A classic. No actual crab inside, of course.', 'th.chips.bacon': 'Bacon. I’ve earned it today.',
+  'th.chipsEnough': 'One bag is enough. Or is it? No, it’s enough.',
+  'act.soda': 'Take a soda', 'act.sodaHave': 'Already have a soda', 'th.sodaHave': 'Already got a soda. It’s so cold my hand is freezing.',
+  'fridge.who': 'Fridge', 'fridge.ask': 'The glass is fogged up. Which one?',
+  'soda.tarkhun': 'Tarkhun', 'soda.buratino': 'Buratino', 'soda.cola': 'People’s Cola',
+  'sodaOpt.tarkhun': 'Tarkhun (green tarragon soda)', 'sodaOpt.buratino': 'Buratino (Soviet lemonade)', 'sodaOpt.cola': 'People’s Cola',
+  'th.soda.tarkhun': 'Tarkhun. Green, just like in childhood.', 'th.soda.buratino': 'Buratino. A taste nobody can explain.', 'th.soda.cola': 'People’s Cola. The people approve.',
+  'act.fridgeOther': 'Fridge',
+  'fridgeLines': ['Kefir. Healthy, but not today.', '“Vertical” juice. Sounds alarming.', 'Milk from a farm on floor 3000. Apparently there are cows up there too.'],
+  'act.water': 'Water on sale', 'th.water': '“Spring of Floor 5000” water. Where would a spring even come from on floor 5000?',
+  'act.baba': 'Old lady', 'baba.who': 'Old lady',
+  'baba.q': 'Sonny, do you know if the elevator on four thousand nine hundred is working?',
+  'baba.o1': 'No idea, grandma', 'baba.a1': 'Nobody knows. I’ll walk, God willing.',
+  'baba.o2': 'Ours has been dead since 4970', 'baba.a2': 'Oh dear. I need to get to 4321… Well, I’ll make it by summer.',
+  'baba.again': 'The potatoes are so small these days. Back on floor two thousand, now those were potatoes!',
+  'guard.who': 'Guard',
+  'guard.lines': ['Move along, don’t linger.', 'Been working here since 4900. Never sat down once. Well, almost.', 'They say the snow will last till spring. And they say spring isn’t coming.', 'Elevator? What elevator?'],
+  'guard.watch': 'The checkout’s over there. I’m watching.', 'guard.stop': 'Young man! Forgot the checkout?',
+  'cash.who': 'Cashier', 'cash.more': 'Anything else?', 'cash.moreNo': 'No, thanks. Have a good evening',
+  'cash.nothing': 'Young man, are you buying anything?',
+  'you.who': 'You', 'you.hint': '(Need to grab something first. Chips are on the shelf to the right, sodas are in the fridges by the back wall.)',
+  'cash.bag': 'Hello. Need a bag?', 'cash.bagYes': 'Yes, please', 'cash.bagNo': 'No, I’ll carry it',
+  'cash.card': 'Do you have our loyalty card?', 'cash.cardNo': 'No', 'cash.cardHome': 'Left it at home',
+  'cash.cardHomeA': 'Everyone leaves it at home. Home is right here for all of us.',
+  'cash.bagItem': 'a bag',
+  'cash.total': (items, sum) => `${items}.\nThat’s ${sum} ₽. Card or cash?`,
+  'cash.payCard': 'Card', 'term.who': 'Card reader', 'term.ok': 'Tap your card… Approved.',
+  'cash.payCash': 'Cash', 'cash.smaller': 'Got anything smaller?', 'cash.only500': 'Just a 500',
+  'cash.change': 'Ugh. Fine, I’ll scrape together the change.',
+  'cash.bye': 'Come again. Careful on the stairs, they’re slippery.',
+  'th.needSoda': 'Still need a soda. The fridges are by the back wall.',
+  'th.needChips': 'Still need chips. The shelf to the right of the aisle.',
+};
+// ---------- 简体中文 ----------
+L10N.zh = {
+  'doc.title': '第5000层',
+  'hud.floor': '第5000层',
+  'lang.label': '语言',
+  'title.eyebrow': '巨构 · 5000 区 · 20000 号房',
+  'title.h1': { a: '第', br: false, b: '层' },
+  'title.lede': '傍晚，暴风雪。家里一点吃的都没有。去 Pyaterochka 超市，得穿过门厅、走出外廊，再爬一段悬在无底深渊上的锈铁楼梯。',
+  'title.keys': [['WASD', '移动'], ['鼠标', '视角'], ['Shift', '快走'], ['E / 点击', '互动'], ['1 2 3', '选择回答'], ['Esc', '暂停']],
+  'title.keysTouch': [['左半屏', '移动'], ['右半屏', '视角'], ['点按 / E', '互动'], ['跑', '加速']],
+  'title.start': '开始',
+  'title.hint': '建议打开声音',
+  'title.hintTouch': '戴上耳机效果更好',
+  'pause.eyebrow': '暂停',
+  'pause.h2': '站在原地\n发呆',
+  'pause.resume': '继续',
+  'pause.hint': '按 Esc 暂停',
+  'end.eyebrow': '20000 号房 · 第 5000 层',
+  'end.h2': '咔嚓。',
+  'end.text': '窗外依旧下着雪。听说在很深很深的下面，有地面。',
+  'end.textDown': '窗外依旧下着雪。你终究没看到底。谁也没看到过。',
+  'end.again': '再去一趟',
+  'end.time': '用时', 'end.dist': '步行距离', 'end.spent': '花费', 'end.loot': '战利品', 'end.floor': '楼层',
+  'end.floorVal': '5000，没变',
+  'fmt.time': (m, s) => `${m} 分 ${s} 秒`,
+  'fmt.dist': d => `${d} 米`,
+  'fmt.thought': t => t,
+  'fmt.say': (who, text) => `${who}：「${text}」`,
+  'list.sep': '、',
+  'touch.run': '跑',
+  'prompt.tap': '点按',
+  'dlg.choose': '选择回答',
+  'dlg.press': n => `按 1–${n}`,
+  'dlg.tap': '点按继续',
+  'dlg.next': 'E、空格或点击继续',
+  'inv.bag': '袋子里', 'inv.hands': '手上', 'inv.unpaid': ' · 未付款',
+  'task.store': '去楼上的 Pyaterochka 超市',
+  'task.chips': '拿薯片', 'task.soda': '拿汽水', 'task.pay': '去收银台结账',
+  'task.home': '回到 20000 号房', 'task.sofa': '抱着薯片窝进沙发',
+  'mute.on': '安静了。只剩下雪。', 'mute.off': '声音回来了。',
+  'intro.1': '傍晚。暴风雪。想吃薯片。',
+  'intro.2': '还想喝汽水。冰的。',
+  'intro.3': '家里当然什么都没有。那就去 Pyaterochka 吧，就在楼上一层，桥上那家。',
+  'z.jacket': '外套披上，钥匙在兜里。出发。',
+  'z.corr': '走廊的灯又在闪。稳定发挥。',
+  'z.lift': '电梯从 4970 层起就坏了。算了，Pyaterochka 就在楼上一层，从外廊走室外楼梯上去就行。',
+  'z.pass': '五千。整整齐齐的数字。电梯可不在乎。',
+  'z.out': '呼——风从下面的楼层灌上来。',
+  'z.stairs': '台阶全是锈。大概和巨构一样老。',
+  'z.deck': '灯亮着。说明还开着。',
+  'z.store': '真暖和。有面包和橘子的味道。',
+  'z.leaveBag': '袋子沙沙作响。日子有盼头了。',
+  'z.leaveHands': '一手薯片，一手汽水。像个骑士。',
+  'z.almost': '快到家了。外套上的雪在化。',
+  'z.home': '到家了。现在，去窗边的沙发。',
+  'z.lookDown': '别往下看……看了。还是看不到底。',
+  'z.fell': '差点掉下去。在这儿摔下去，比活一辈子还久。',
+  'hint.door': '去走廊的门在身后，衣帽钩旁边。',
+  'hint.pass': '去外廊得穿过墙上写着「5000」的门厅。',
+  'hint.ext': '通往外廊的是那扇铁门，往外推。',
+  'act.rail': '摸摸栏杆', 'th.rail': '栏杆冰得要命，手指都快粘上去了。',
+  'act.service': '拉一下门', 'th.service': '门上写着「闲人免进」。锁着。门后有人在咳嗽。',
+  'act.poster': '看看海报', 'th.poster': '「全天营业。哪怕电梯罢工。」挺让人安心的。',
+  'door.open': '开门', 'door.close': '关门', 'door.ext': '打开通往外廊的门',
+  'act.knock': n => `敲 ${n} 号房的门`,
+  'nb.19997': '门后飘来炸土豆的香味。没人开门。',
+  'nb.19998': '一片寂静。里面已经安静了十来年。',
+  'nb.19999': '门后有人在打电钻。一如既往，晚上八点整。',
+  'nb.19996': '「谁啊？」「邻居。」「哪来的邻居？」好吧。',
+  'act.lift': '叫电梯',
+  'th.lift': '没动静。很深很深的下面，有什么东西嘎吱响了一声。牌子上写着「电梯故障」，从 4970 层起就坏了。',
+  'act.button': '按按钮', 'th.button': '按钮连亮都不亮。',
+  'act.notice': '看公告', 'notice.who': '公告',
+  'notice.text': '尊敬的 4900–5100 层住户：\n10 月 1 日至 6 月 30 日停止供应热水。计划内检修。\n电梯：正在维修。预计 2031 年完工。\n请勿将大件垃圾扔进垃圾道：它们落不到底。\n——巨构管理处',
+  'notice.who2': '下面还贴着一张', 'notice.text2': '高价求购 1 楼车库。',
+  'act.chute': '打开垃圾道', 'th.chute': '管道里往上冒冷气。听说垃圾要掉一个星期才到底。',
+  'act.window': '看看窗外',
+  'th.window': '下雪了。听说下面某个地方有地面。没人去确认过。',
+  'th.windowPaid': 'Pyaterochka 在外面某处亮着。谢谢你，Pyaterochka。',
+  'act.cactus': '仙人掌', 'th.cactus': '仙人掌。唯一懂我的家伙。一个季度浇一次水。',
+  'act.sofaEnd': '抱着薯片坐下', 'act.sofa': '坐到沙发上', 'th.sofa': '先去买薯片。沙发可以等。',
+  'act.carpet': '挂毯', 'th.carpet': '墙上的挂毯。我搬来之前就挂在这儿了。说不定比巨构还早。',
+  'act.monitor': '看看显示器', 'th.monitor': '还在编译。147/412。刚好够我去买包薯片。',
+  'act.fridge': '打开冰箱', 'th.fridge': '半个柠檬、一瓶芥末，还有一盏灯。至少灯是免费的。',
+  'act.tv': '电视', 'th.tv': '电视里是雪花，窗外也是雪花。稳定。',
+  'act.counter': '去收银台', 'act.cashier': '和收银员说话', 'act.guard': '保安', 'act.goods': '看看货架',
+  'shelfA': ['「楼层」牌面包干。不是这个。', '「5000 周年」饼干。今天不买。', '瓜子。留着下次。'],
+  'shelfB': ['意面。不，我是来买薯片的。', '4980 层面包房的面包。听说还是热的。', '荞麦。巨构的战略储备。'],
+  'act.chips': v => `拿一包「ХРУСТ」薯片（${v}）`, 'act.chipsEnough': '一包就够了',
+  'chips.sour': '酸奶油香草味', 'chips.crab': '蟹味', 'chips.bacon': '培根味',
+  'chips.name': v => `「ХРУСТ」薯片·${v}`,
+  'th.chips.sour': '酸奶油香草味。约等于沙拉。', 'th.chips.crab': '蟹味。经典款。当然，里面没有螃蟹。', 'th.chips.bacon': '培根味。今天可以放纵一下。',
+  'th.chipsEnough': '一包就够了。真的够吗？够了。',
+  'act.soda': '拿汽水', 'act.sodaHave': '已经有汽水了', 'th.sodaHave': '已经拿了汽水。冰得手都冻僵了。',
+  'fridge.who': '冷柜', 'fridge.ask': '玻璃上起了雾。要哪一瓶？',
+  'soda.tarkhun': '龙蒿汽水', 'soda.buratino': '布拉季诺柠檬水', 'soda.cola': '「人民」可乐',
+  'sodaOpt.tarkhun': '龙蒿汽水（绿色的那种）', 'sodaOpt.buratino': '布拉季诺柠檬水（苏联老味道）', 'sodaOpt.cola': '「人民」可乐',
+  'th.soda.tarkhun': '龙蒿汽水。绿绿的，就像小时候。', 'th.soda.buratino': '布拉季诺。一种说不清的味道。', 'th.soda.cola': '「人民」可乐。人民群众很满意。',
+  'act.fridgeOther': '冷柜',
+  'fridgeLines': ['开菲尔酸奶。健康，但今天不要。', '「垂直」牌果汁。听着有点吓人。', '3000 层农场的牛奶。看来那里也养着奶牛。'],
+  'act.water': '特价矿泉水', 'th.water': '「5000 层山泉」矿泉水。5000 层哪来的山泉？',
+  'act.baba': '老奶奶', 'baba.who': '老奶奶',
+  'baba.q': '小伙子，你知道四千九百层的电梯能用吗？',
+  'baba.o1': '不知道啊，奶奶', 'baba.a1': '谁都不知道。那我走着去吧，老天保佑。',
+  'baba.o2': '我们那边从 4970 层起就坏了', 'baba.a2': '哎哟。我要去 4321 层呢……没事，夏天之前能走到。',
+  'baba.again': '现在的土豆都好小。以前在两千层的时候，那土豆才叫土豆！',
+  'guard.who': '保安',
+  'guard.lines': ['往里走，别堵门口。', '我从 4900 层就在这儿上班了。一次都没坐下过。嗯，差不多吧。', '听说雪要下到开春。又听说春天不会来了。', '电梯？什么电梯？'],
+  'guard.watch': '收银台在那边。我盯着呢。', 'guard.stop': '小伙子！还没结账呢！',
+  'cash.who': '收银员', 'cash.more': '还要别的吗？', 'cash.moreNo': '不用了，谢谢。晚上愉快',
+  'cash.nothing': '小伙子，你要买东西吗？',
+  'you.who': '你', 'you.hint': '（得先拿点东西。薯片在右手边的货架上，汽水在最里面靠墙的冷柜里。）',
+  'cash.bag': '你好。要袋子吗？', 'cash.bagYes': '要，谢谢', 'cash.bagNo': '不用，我拿着就行',
+  'cash.card': '有会员卡吗？', 'cash.cardNo': '没有', 'cash.cardHome': '忘在家里了',
+  'cash.cardHomeA': '大家都忘在家里。反正大家的家都在这附近。',
+  'cash.bagItem': '袋子',
+  'cash.total': (items, sum) => `${items}。\n一共 ${sum} 卢布。刷卡还是现金？`,
+  'cash.payCard': '刷卡', 'term.who': 'POS 机', 'term.ok': '请刷卡……支付成功。',
+  'cash.payCash': '现金', 'cash.smaller': '有零钱吗？', 'cash.only500': '只有一张五百的',
+  'cash.change': '唉，好吧，我凑凑零钱。',
+  'cash.bye': '欢迎再来。楼梯上小心，很滑。',
+  'th.needSoda': '还得拿汽水。冷柜在最里面的墙边。',
+  'th.needChips': '还差薯片。在过道右边的货架上。',
+};
+// ================= Процедурные текстуры (canvas) =================
+// Всё рисуется в рантайме: ни одного внешнего файла картинок.
+const FONT_D = '"Rubik Mono One", Impact, sans-serif';
+const FONT_S = '"PT Serif", Georgia, serif';
+const FONT_M = '"PT Mono", "Courier New", monospace';
+
+function cnv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
+// mulberry32 — детерминированный ГПСЧ, чтобы Структура была одной и той же при каждом запуске
+function rnd(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function toTex(c, rep = true) {
+  const t = new THREE.CanvasTexture(c);
+  if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+function noise(g, w, h, amt, R) {
+  const id = g.getImageData(0, 0, w, h), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (R() - 0.5) * amt; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(id, 0, 0);
+}
+function txt(g, s, x, y, font, color, align = 'left') { g.font = font; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'middle'; g.fillText(s, x, y); }
+
+// Фасад: 8×8 пролётов по 3×3 м, кирпич, окна (часть горит), потёки, кондиционеры.
+// Текстура «предосвещена» под сумерки: фасады рисуются без расчёта света (MeshBasicMaterial) —
+// это самые большие площади на экране, так дешевле в разы, а горящие окна остаются яркими.
+function texFacade() {
+  const S = 2048, T = 256, N = 8, R = rnd(5000);
+  const [c, g] = cnv(S, S);
+  g.fillStyle = '#4d4a46'; g.fillRect(0, 0, S, S);
+  const bh = 8, bw = 22;
+  for (let y = 0; y < S; y += bh) {
+    const off = ((y / bh) % 2) * bw / 2;
+    for (let x = -bw; x < S; x += bw) {
+      const v = 96 + ((R() * 16) | 0) - 8, dk = R() < 0.05 ? -14 : 0;
+      g.fillStyle = `rgb(${v + 6 + dk},${v + 3 + dk},${v - 2 + dk})`;
+      g.fillRect(x + off + 1, y + 1, bw - 2, bh - 2);
+    }
+  }
+  for (let j = 0; j < N; j++) { const y = j * T + T - 12; g.fillStyle = '#4a4744'; g.fillRect(0, y, S, 12); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y + 10, S, 2); }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const wx = i * T + 72, wy = j * T + 56, ww = 112, wh = 124;
+    const st = g.createLinearGradient(0, wy + wh, 0, wy + wh + 80);
+    st.addColorStop(0, 'rgba(38,34,28,.38)'); st.addColorStop(1, 'rgba(38,34,28,0)');
+    g.fillStyle = st; g.fillRect(wx + 10, wy + wh, ww - 20, 80);
+    g.fillStyle = '#2c2a28'; g.fillRect(wx - 6, wy - 6, ww + 12, wh + 12);
+    const pvc = R() < 0.55, frame = pvc ? '#8f8e8a' : '#3f3328';
+    g.fillStyle = frame; g.fillRect(wx, wy, ww, wh);
+    const gx = wx + 6, gy = wy + 6, gw = ww - 12, gh = wh - 12;
+    const lit = R() < 0.34, tv = !lit && R() < 0.07;
+    if (lit) {
+      const h = R(), col = h < 0.68 ? ['#ffd690', '#f09a40'] : h < 0.9 ? ['#fff3d6', '#e6c88e'] : ['#ffb8a0', '#d06a52'];
+      const lg = g.createLinearGradient(0, gy, 0, gy + gh); lg.addColorStop(0, col[0]); lg.addColorStop(1, col[1]);
+      g.fillStyle = lg; g.fillRect(gx, gy, gw, gh);
+      const cc = ['#7a3b2e', '#3d5a3a', '#6b5a2a', '#4a3a5a', '#8a6a4a', '#2f3f5f'][(R() * 6) | 0];
+      const cw = 12 + R() * 26, cw2 = 10 + R() * 30;
+      g.globalAlpha = 0.88; g.fillStyle = cc; g.fillRect(gx, gy, cw, gh); g.fillRect(gx + gw - cw2, gy, cw2, gh); g.globalAlpha = 1;
+      if (R() < 0.4) { g.fillStyle = 'rgba(60,30,10,.55)'; g.beginPath(); g.moveTo(gx + gw * 0.38, gy + 16); g.lineTo(gx + gw * 0.62, gy + 16); g.lineTo(gx + gw * 0.56, gy + 6); g.lineTo(gx + gw * 0.44, gy + 6); g.fill(); }
+    } else if (tv) {
+      g.fillStyle = '#34507a'; g.fillRect(gx, gy, gw, gh);
+    } else {
+      const dg = g.createLinearGradient(gx, gy, gx + gw, gy + gh);
+      dg.addColorStop(0, '#4a535a'); dg.addColorStop(0.45, '#1a1f23'); dg.addColorStop(1, '#262c31');
+      g.fillStyle = dg; g.fillRect(gx, gy, gw, gh);
+    }
+    g.fillStyle = frame;
+    g.fillRect(gx + gw / 2 - 3, gy, 6, gh);
+    g.fillRect(gx, gy + gh * 0.27, gw, 5);
+    g.fillStyle = '#45433f'; g.fillRect(wx - 8, wy + wh + 6, ww + 16, 5);
+    if (R() < 0.09) { const ax = wx + ww + 16, ay = wy + 30; g.fillStyle = '#8a8a86'; g.fillRect(ax, ay, 36, 28); g.fillStyle = '#5a5a56'; for (let k = 0; k < 6; k++) g.fillRect(ax + 4, ay + 4 + k * 4, 28, 1.5); }
+  }
+  noise(g, S, S, 20, R);
+  for (let k = 0; k < 170; k++) {
+    const x = R() * S, y = R() * S, h = 60 + R() * 320, gg = g.createLinearGradient(0, y, 0, y + h);
+    gg.addColorStop(0, 'rgba(30,28,25,.2)'); gg.addColorStop(1, 'rgba(30,28,25,0)'); g.fillStyle = gg; g.fillRect(x, y, 2 + R() * 6, h);
+  }
+  return { map: toTex(c) };
+}
+
+function texWallpaper() {
+  const [c, g] = cnv(256, 256), R = rnd(7);
+  g.fillStyle = '#cbb68b'; g.fillRect(0, 0, 256, 256);
+  for (let x = 0; x < 256; x += 64) { g.fillStyle = 'rgba(255,246,222,.28)'; g.fillRect(x + 4, 0, 22, 256); g.fillStyle = 'rgba(120,88,50,.2)'; g.fillRect(x + 30, 0, 2, 256); }
+  for (let y = 16; y < 256 + 64; y += 64) for (let x = 48; x < 256; x += 64) {
+    const fy = (y + ((x / 64) % 2) * 32) % 256;
+    g.fillStyle = 'rgba(140,64,52,.55)';
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * 5, fy + Math.sin(a) * 5, 4, 2.4, a, 0, 7); g.fill(); }
+    g.fillStyle = 'rgba(86,108,58,.6)'; g.beginPath(); g.ellipse(x - 8, fy + 10, 6, 2, 0.6, 0, 7); g.fill();
+  }
+  noise(g, 256, 256, 10, R); return toTex(c);
+}
+
+function texLino() {
+  const [c, g] = cnv(512, 512), R = rnd(11);
+  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+    const x0 = i * 128, y0 = j * 128, hor = (i + j) % 2 === 0;
+    for (let k = 0; k < 4; k++) {
+      const v = R() * 22 - 11; g.fillStyle = `rgb(${124 + v},${80 + v * 0.7},${50 + v * 0.5})`;
+      const [rx, ry, rw, rh] = hor ? [x0, y0 + k * 32, 128, 32] : [x0 + k * 32, y0, 32, 128];
+      g.fillRect(rx, ry, rw, rh);
+      g.strokeStyle = 'rgba(58,33,18,.25)'; g.lineWidth = 1;
+      for (let s = 0; s < 6; s++) {
+        g.beginPath();
+        if (hor) { const yy = ry + 3 + R() * 26; g.moveTo(rx, yy); g.bezierCurveTo(rx + 40, yy + R() * 4 - 2, rx + 80, yy + R() * 4 - 2, rx + 128, yy); }
+        else { const xx = rx + 3 + R() * 26; g.moveTo(xx, ry); g.bezierCurveTo(xx + R() * 4 - 2, ry + 40, xx + R() * 4 - 2, ry + 80, xx, ry + 128); }
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(36,20,10,.55)'; g.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+    }
+  }
+  noise(g, 512, 512, 14, R); return toTex(c);
+}
+
+function texPaint() { // коридор: низ — масляная краска до 1,5 м, верх — побелка
+  const [c, g] = cnv(256, 256), R = rnd(13);
+  g.fillStyle = '#d3cfc5'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#3c5955'; g.fillRect(0, 128, 256, 128);
+  g.fillStyle = '#263a37'; g.fillRect(0, 126, 256, 3);
+  noise(g, 256, 256, 16, R);
+  for (let k = 0; k < 30; k++) { g.strokeStyle = 'rgba(220,214,198,.35)'; g.beginPath(); const x = R() * 256, y = 140 + R() * 110; g.moveTo(x, y); g.lineTo(x + R() * 20 - 10, y + R() * 6 - 3); g.stroke(); }
+  for (let k = 0; k < 7; k++) { g.fillStyle = 'rgba(80,70,50,.08)'; g.beginPath(); g.arc(R() * 256, R() * 120, 10 + R() * 30, 0, 7); g.fill(); }
+  return toTex(c);
+}
+
+function texGridTiles(seed, n, a, b, grout, amt = 12) { // плитка n×n, шахматка из двух тонов
+  const [c, g] = cnv(256, 256), R = rnd(seed), s = 256 / n;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    g.fillStyle = (i + j) % 2 ? a : b; g.fillRect(i * s, j * s, s, s);
+    g.fillStyle = `rgba(0,0,0,${R() * 0.08})`; g.fillRect(i * s, j * s, s, s);
+  }
+  g.strokeStyle = grout; g.lineWidth = 2;
+  for (let k = 0; k <= n; k++) { g.beginPath(); g.moveTo(k * s, 0); g.lineTo(k * s, 256); g.stroke(); g.beginPath(); g.moveTo(0, k * s); g.lineTo(256, k * s); g.stroke(); }
+  noise(g, 256, 256, amt, R); return toTex(c);
+}
+
+function texCeiling() { // «армстронг»
+  const [c, g] = cnv(256, 256), R = rnd(19);
+  g.fillStyle = '#e9e8e2'; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 900; k++) { g.fillStyle = 'rgba(90,90,85,.25)'; g.fillRect(R() * 256, R() * 256, 1.5, 1.5); }
+  g.fillStyle = '#b9b8b2'; g.fillRect(0, 0, 256, 4); g.fillRect(0, 126, 256, 4); g.fillRect(0, 0, 4, 256); g.fillRect(126, 0, 4, 256);
+  return toTex(c);
+}
+
+function texConcrete(base, seed, snowy) {
+  const [c, g] = cnv(256, 256), R = rnd(seed);
+  g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${snowy ? '255,255,255' : '40,40,38'},${0.04 + R() * 0.08})`; g.beginPath(); g.ellipse(R() * 256, R() * 256, 8 + R() * 40, 6 + R() * 30, R() * 3, 0, 7); g.fill(); }
+  noise(g, 256, 256, snowy ? 26 : 30, R); return toTex(c);
+}
+
+function texRust() {
+  const [c, g] = cnv(256, 256), R = rnd(23);
+  g.fillStyle = '#6a3a24'; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 90; k++) { const p = R(); g.fillStyle = p < 0.5 ? 'rgba(150,72,34,.35)' : p < 0.8 ? 'rgba(40,22,14,.35)' : 'rgba(120,110,100,.25)'; g.beginPath(); g.arc(R() * 256, R() * 256, 2 + R() * 18, 0, 7); g.fill(); }
+  noise(g, 256, 256, 34, R); return toTex(c);
+}
+
+function texCarpet() { // настенный ковёр: бордюры, центральный медальон, россыпь мотивов
+  const W = 512, H = 320, [c, g] = cnv(W, H), R = rnd(17);
+  g.fillStyle = '#6d1620'; g.fillRect(0, 0, W, H);
+  for (let y = 40; y < H - 30; y += 34) for (let x = 44; x < W - 30; x += 38) {
+    if (Math.abs(x - W / 2) < 170 && Math.abs(y - H / 2) < 100) continue;
+    g.fillStyle = (x + y) % 3 ? '#d9c49a' : '#1f2a4a'; g.fillRect(x - 5, y - 1.5, 10, 3); g.fillRect(x - 1.5, y - 5, 3, 10);
+  }
+  const dia = (cx, cy, s, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(cx, cy - s * 0.62); g.lineTo(cx + s, cy); g.lineTo(cx, cy + s * 0.62); g.lineTo(cx - s, cy); g.closePath(); g.fill(); };
+  [[150, '#1f2a4a'], [132, '#d9c49a'], [122, '#8a1f28'], [88, '#1f2a4a'], [66, '#e0b860'], [44, '#6d1620'], [20, '#d9c49a']].forEach(([s, col]) => dia(W / 2, H / 2, s, col));
+  for (const [cx, cy] of [[0, 0], [W, 0], [0, H], [W, H]]) [[90, '#1f2a4a'], [70, '#d9c49a'], [52, '#8a1f28']].forEach(([s, col]) => dia(cx, cy, s, col));
+  const bands = [['#d9c49a', 6], ['#1f2a4a', 18], ['#d9c49a', 4], ['#8a1f28', 10]];
+  let o = 0; for (const [col, w] of bands) { g.strokeStyle = col; g.lineWidth = w; g.strokeRect(o + w / 2, o + w / 2, W - 2 * o - w, H - 2 * o - w); o += w; }
+  g.fillStyle = '#e0b860'; for (let x = 14; x < W; x += 16) { g.fillRect(x, 10, 6, 6); g.fillRect(x, H - 16, 6, 6); }
+  noise(g, W, H, 20, R); return toTex(c, false);
+}
+
+function texDoor(num, col) { // дерматин с гвоздиками
+  const [c, g] = cnv(128, 256), R = rnd(num | 7);
+  g.fillStyle = col; g.fillRect(0, 0, 128, 256);
+  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1.5;
+  for (let k = -256; k < 384; k += 32) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 256, 256); g.stroke(); g.beginPath(); g.moveTo(k + 256, 0); g.lineTo(k, 256); g.stroke(); }
+  g.fillStyle = '#c9b27a'; for (let y = 0; y <= 256; y += 16) for (let x = 0; x <= 128; x += 16) if ((x + y) % 32 === 0) { g.beginPath(); g.arc(x, y, 2.2, 0, 7); g.fill(); }
+  g.strokeStyle = '#24130c'; g.lineWidth = 7; g.strokeRect(3, 3, 122, 250);
+  if (num) { g.fillStyle = '#d8c9a0'; g.fillRect(30, 38, 68, 24); txt(g, String(num), 64, 51, `bold 17px ${FONT_M}`, '#222', 'center'); }
+  g.fillStyle = '#111'; g.beginPath(); g.arc(64, 92, 4, 0, 7); g.fill(); g.strokeStyle = '#bba86a'; g.lineWidth = 2; g.stroke();
+  noise(g, 128, 256, 14, R); return toTex(c, false);
+}
+
+function texMetalDoor(lines, base = '#34483f') {
+  const [c, g] = cnv(128, 256), R = rnd(29);
+  g.fillStyle = base; g.fillRect(0, 0, 128, 256);
+  for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(120,60,30,${0.15 + R() * 0.3})`; g.beginPath(); g.arc(R() * 128, R() * 256, 1 + R() * 6, 0, 7); g.fill(); }
+  g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 4; g.strokeRect(10, 10, 108, 236);
+  if (lines) { g.fillStyle = '#e8e4d8'; g.fillRect(14, 70, 100, 18 + lines.length * 14); lines.forEach((l, i) => txt(g, l, 64, 84 + i * 14, `bold 11px ${FONT_M}`, '#a01818', 'center')); }
+  noise(g, 128, 256, 18, R); return toTex(c, false);
+}
+
+function texLift() {
+  const [c, g] = cnv(256, 256), R = rnd(31);
+  const gr = g.createLinearGradient(0, 0, 256, 0); gr.addColorStop(0, '#8d9093'); gr.addColorStop(0.5, '#b4b7b9'); gr.addColorStop(1, '#8a8d90');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 120; k++) { g.strokeStyle = `rgba(40,40,40,${R() * 0.25})`; g.beginPath(); const x = R() * 256, y = R() * 256; g.moveTo(x, y); g.lineTo(x + R() * 40 - 20, y + R() * 8 - 4); g.stroke(); }
+  g.fillStyle = '#3a3c3e'; g.fillRect(126, 0, 4, 256);
+  g.save(); g.translate(128, 104); g.rotate(-0.06);
+  g.fillStyle = '#f2efe6'; g.fillRect(-70, -30, 140, 60);
+  txt(g, 'ЛИФТ', 0, -12, `bold 20px ${FONT_M}`, '#b01c1c', 'center'); txt(g, 'НЕ РАБОТАЕТ', 0, 12, `bold 16px ${FONT_M}`, '#b01c1c', 'center');
+  g.fillStyle = 'rgba(200,190,150,.7)'; g.fillRect(-78, -34, 22, 10); g.fillRect(56, 24, 22, 10); g.restore();
+  g.strokeStyle = 'rgba(30,30,120,.55)'; g.lineWidth = 2; g.beginPath(); g.moveTo(40, 190); g.bezierCurveTo(60, 170, 80, 210, 100, 185); g.stroke();
+  noise(g, 256, 256, 12, R); return toTex(c, false);
+}
+
+function texSign() { // вывеска: только название, без логотипа
+  const [c, g] = cnv(1024, 192), R = rnd(37);
+  const gr = g.createLinearGradient(0, 0, 0, 192); gr.addColorStop(0, '#8a6a46'); gr.addColorStop(1, '#5a4029');
+  g.fillStyle = gr; g.fillRect(0, 0, 1024, 192);
+  g.strokeStyle = 'rgba(255,240,210,.35)'; g.lineWidth = 6; g.strokeRect(8, 8, 1008, 176);
+  g.shadowColor = 'rgba(255,255,255,.8)'; g.shadowBlur = 18;
+  txt(g, 'Пятёрочка', 512, 100, `italic bold 112px ${FONT_S}`, '#fffaf0', 'center');
+  g.shadowBlur = 0; noise(g, 1024, 192, 10, R);
+  const t = toTex(c, false); return t;
+}
+
+function texNotice() {
+  const [c, g] = cnv(512, 640), R = rnd(41);
+  g.fillStyle = '#5b4a36'; g.fillRect(0, 0, 512, 640);
+  g.fillStyle = '#efe9d8'; g.save(); g.translate(256, 250); g.rotate(-0.012); g.fillRect(-220, -220, 440, 430);
+  const L = ['ОБЪЯВЛЕНИЕ', '', 'Уважаемые жильцы этажей 4900–5100!', 'С 1 октября по 30 июня горячей', 'воды не будет. Плановая профилактика.', '', 'Лифт: ремонт ведётся.', 'Ориентировочный срок — 2031 г.', '', 'Не выбрасывайте в мусоропровод', 'крупногабарит: он не долетает.', '', '                Администрация Структуры'];
+  L.forEach((l, i) => txt(g, l, -196, -190 + i * 30, i === 0 ? `bold 30px ${FONT_M}` : `17px ${FONT_M}`, i === 0 ? '#9a1414' : '#222'));
+  g.restore();
+  g.save(); g.translate(150, 545); g.rotate(0.05); g.fillStyle = '#f7f4ea'; g.fillRect(-110, -55, 220, 110);
+  txt(g, 'КУПЛЮ ГАРАЖ', 0, -32, `bold 18px ${FONT_M}`, '#1a1a8a', 'center'); txt(g, 'на 1-м этаже. Дорого.', 0, -8, `15px ${FONT_M}`, '#1a1a8a', 'center');
+  g.strokeStyle = '#999'; for (let k = -100; k < 110; k += 22) { g.beginPath(); g.moveTo(k, 14); g.lineTo(k, 55); g.stroke(); }
+  g.restore();
+  g.fillStyle = '#c03030'; [[60, 40], [450, 44], [70, 460], [440, 456], [150, 492]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill(); });
+  noise(g, 512, 640, 12, R); return toTex(c, false);
+}
+
+function texStencil(s) {
+  const [c, g] = cnv(512, 256), R = rnd(43);
+  txt(g, s, 256, 132, `200px ${FONT_D}`, '#8b2a1e', 'center');
+  g.globalCompositeOperation = 'destination-out';
+  for (let k = 0; k < 2600; k++) { g.fillStyle = `rgba(0,0,0,${R() * 0.9})`; g.fillRect(R() * 512, R() * 256, 1 + R() * 3, 1 + R() * 3); }
+  return toTex(c, false);
+}
+
+function texMonitor() {
+  const [c, g] = cnv(512, 320);
+  g.fillStyle = '#0a0e0b'; g.fillRect(0, 0, 512, 320);
+  const L = [['me@kv20000:~/structure$ cargo build --release', '#9fe09f'], ['   Compiling libc v0.2.159', '#d8d8d8'], ['   Compiling snow v1.0.0', '#d8d8d8'], ['   Compiling elevator v0.0.1 (broken)', '#e0c060'], ['   Compiling structure v5.0.0', '#d8d8d8'], ['    Building [=========>      ] 147/412', '#7fb0ff'], ['', ''], ['// TODO: сходить за чипсами', '#8a8a8a']];
+  L.forEach(([l, col], i) => txt(g, l, 16, 28 + i * 30, `17px ${FONT_M}`, col));
+  g.fillStyle = '#9fe09f'; g.fillRect(16, 268, 10, 18);
+  return toTex(c, false);
+}
+
+function texChips(name, c1, c2) {
+  const [c, g] = cnv(256, 320);
+  const gr = g.createLinearGradient(0, 0, 0, 320); gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 320);
+  g.fillStyle = 'rgba(255,255,255,.15)'; g.fillRect(0, 0, 256, 14); g.fillRect(0, 306, 256, 14);
+  g.lineWidth = 8; g.strokeStyle = '#1b1b1b'; g.font = `44px ${FONT_D}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.strokeText('ХРУСТ', 128, 70); g.fillStyle = '#fff6d8'; g.fillText('ХРУСТ', 128, 70);
+  g.fillStyle = '#f2c14e'; g.beginPath(); g.ellipse(128, 168, 70, 48, -0.3, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(160,100,20,.6)'; g.lineWidth = 3; for (let k = -2; k <= 2; k++) { g.beginPath(); g.ellipse(128, 168 + k * 14, 60 - Math.abs(k) * 10, 6, -0.3, 0, Math.PI); g.stroke(); }
+  txt(g, name, 128, 262, `bold 24px ${FONT_S}`, '#ffffff', 'center');
+  txt(g, '150 г', 128, 292, `16px ${FONT_M}`, 'rgba(255,255,255,.8)', 'center');
+  return toTex(c, false);
+}
+
+function texPrice(main, sub) {
+  const [c, g] = cnv(128, 64);
+  g.fillStyle = '#f3d23a'; g.fillRect(0, 0, 128, 64);
+  txt(g, sub || '', 6, 12, `10px ${FONT_M}`, '#333');
+  txt(g, main, 122, 40, `bold 32px ${FONT_M}`, '#111', 'right');
+  return toTex(c, false);
+}
+
+function texPoster() {
+  const [c, g] = cnv(256, 360);
+  g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, 256, 360);
+  g.fillStyle = '#7a2bb0'; g.fillRect(0, 0, 256, 70);
+  txt(g, 'РАБОТАЕМ', 128, 36, `24px ${FONT_D}`, '#fff', 'center');
+  ['круглосуточно.', 'Даже когда', 'лифт не работает.'].forEach((l, i) => txt(g, l, 128, 120 + i * 36, `bold 25px ${FONT_S}`, '#222', 'center'));
+  txt(g, 'Тепло внутри', 128, 300, `italic 22px ${FONT_S}`, '#7a2bb0', 'center');
+  return toTex(c, false);
+}
+
+function texBand() { // фиолетовые стеклянные панели над витриной
+  const [c, g] = cnv(256, 64);
+  const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, '#3d1d8a'); gr.addColorStop(1, '#a24bff');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 64);
+  g.fillStyle = 'rgba(20,8,40,.75)'; for (let x = 0; x < 256; x += 64) g.fillRect(x, 0, 3, 64);
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(0, 4, 256, 3);
+  return toTex(c);
+}
+
+function texSnow() {
+  const [c, g] = cnv(64, 64), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return toTex(c, false);
+}
+
+function grainDataURL() {
+  const [c, g] = cnv(160, 160), id = g.createImageData(160, 160), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  g.putImageData(id, 0, 0); return c.toDataURL();
+}
+
+// Телевизор: «снег» на экране, обновляется в цикле
+const tvData = new Uint8Array(64 * 48 * 4);
+function tvStep() {
+  const d = tvData;
+  for (let i = 0; i < d.length; i += 4) { const v = 40 + Math.random() * 200; d[i] = v; d[i + 1] = v; d[i + 2] = Math.min(255, v + 10); d[i + 3] = 255; }
+}
+// ================= Ядро: рендер, сцена, материалы, хелперы геометрии/коллизий =================
+// Единицы — метры, ось Y вверх. y = 0 — пол 5000-го этажа.
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+app.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const FOG_COL = new THREE.Color(0x7b828a);
+scene.background = FOG_COL.clone();
+scene.fog = new THREE.FogExp2(FOG_COL.getHex(), 0.022);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 320);
+camera.rotation.order = 'YXZ';
+
+const hemi = new THREE.HemisphereLight(0xcbd3dd, 0x34343a, 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xdfe6ef, 0.32);
+sun.position.set(-30, 60, 20);
+scene.add(sun);
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
+
+// ---- реестры ----
+const colliders = [];   // AABB: {x0,y0,z0,x1,y1,z1,surf,on}
+const rayMeshes = [];   // во что упирается луч взаимодействия
+const zones = [];       // триггеры по объёму
+const interiors = [];   // объёмы «под крышей»: туда не падает снег, там тише ветер
+const tickers = [];     // покадровые анимации
+let NEAR = false;       // пока true — новые коробки участвуют в луче взаимодействия
+
+function addCol(x0, y0, z0, x1, y1, z1, surf = 'concrete') {
+  const c = { x0, y0, z0, x1, y1, z1, surf, on: true }; colliders.push(c); return c;
+}
+function zone(x0, y0, z0, x1, y1, z1, fn, once = true) { zones.push({ x0, y0, z0, x1, y1, z1, fn, once, inside: false, done: false }); }
+function onTick(fn) { tickers.push(fn); }
+function act(obj, label, fn) { obj.userData.act = { label, fn }; if (!rayMeshes.includes(obj)) rayMeshes.push(obj); return obj; }
+
+// UV в мировых координатах: текстура «течёт» через стыки разных коробок без швов.
+// tu/tv — метров на один повтор текстуры, du — сдвиг по u (для разнообразия башен).
+function worldUV(geo, cx, cy, cz, tu, tv, du = 0) {
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i) + cx, y = p.getY(i) + cy, z = p.getZ(i) + cz;
+    const nx = n.getX(i), ny = n.getY(i), nz = n.getZ(i);
+    let u, v;
+    if (Math.abs(nx) > 0.5) { u = nx > 0 ? -z : z; v = y; }
+    else if (Math.abs(ny) > 0.5) { u = x; v = ny > 0 ? -z : z; }
+    else { u = nz > 0 ? x : -x; v = y; }
+    uv.setXY(i, (u + du) / tu, v / tv);
+  }
+  uv.needsUpdate = true;
+}
+
+// Коробка по двум углам. По умолчанию — с коллайдером. o: {uv:[tu,tv,du], col:false, surf, parent, ray}
+function box(x0, y0, z0, x1, y1, z1, mat, o = {}) {
+  const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+  if (o.uv) worldUV(geo, cx, cy, cz, 1, 1, o.du || 0); // UV в метрах; масштаб задаёт texture.repeat
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(cx, cy, cz);
+  (o.parent || scene).add(m);
+  if (o.col !== false) m.userData.col = addCol(x0, y0, z0, x1, y1, z1, o.surf);
+  if (o.ray ?? NEAR) rayMeshes.push(m);
+  return m;
+}
+
+// Балка между двумя точками (визуальная, без коллайдера)
+const _UP = new THREE.Vector3(0, 1, 0);
+function beam(a, b, t, mat, parent = scene) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(t, A.distanceTo(B), t), mat);
+  m.position.copy(A).add(B).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(_UP, B.clone().sub(A).normalize());
+  parent.add(m); return m;
+}
+
+// Плоскость-наклейка (вывески, объявления). Нормаль: '+x' | '-x' | '+z' | '-z'
+function decal(tex, w, h, x, y, z, facing, o = {}) {
+  const mat = o.basic ? new THREE.MeshBasicMaterial({ map: tex, transparent: !!o.transparent, toneMapped: false })
+                      : new THREE.MeshLambertMaterial({ map: tex, transparent: !!o.transparent });
+  if (o.transparent) mat.depthWrite = false;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  m.position.set(x, y, z);
+  m.rotation.y = { '+z': 0, '-z': Math.PI, '+x': Math.PI / 2, '-x': -Math.PI / 2 }[facing];
+  scene.add(m); if (o.ray ?? NEAR) rayMeshes.push(m);
+  return m;
+}
+
+// Распашная дверь. plane 'x': стена x=at, проём по z∈[a0,a1]; plane 'z': стена z=at, проём по x∈[a0,a1].
+// swing ±1 — в какую сторону открывается. Петли на стороне a0.
+function hingedDoor({ plane, at, a0, a1, y0 = 0, h = 2.05, mat, swing = 1, label, sound = 'door', onOpen }) {
+  const w = a1 - a0, t = 0.06, pivot = new THREE.Group();
+  const mesh = new THREE.Mesh(plane === 'x' ? new THREE.BoxGeometry(t, h, w) : new THREE.BoxGeometry(w, h, t), mat);
+  if (plane === 'x') { pivot.position.set(at, y0, a0); mesh.position.set(0, h / 2, w / 2); }
+  else { pivot.position.set(a0, y0, at); mesh.position.set(w / 2, h / 2, 0); }
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), MAT.brass);
+  if (plane === 'x') knob.position.set(0, 1.0 - h / 2, w / 2 - 0.08).add(new THREE.Vector3(0, 0, 0)); else knob.position.set(w / 2 - 0.08, 1.0 - h / 2, 0);
+  const k2 = knob.clone(); mesh.add(knob, k2);
+  if (plane === 'x') { knob.position.x = 0.05; k2.position.x = -0.05; } else { knob.position.z = 0.05; k2.position.z = -0.05; }
+  pivot.add(mesh); scene.add(pivot);
+  const col = plane === 'x' ? addCol(at - 0.1, y0, a0, at + 0.1, y0 + h, a1, 'door') : addCol(a0, y0, at - 0.1, a1, y0 + h, at + 0.1, 'door');
+  const D = { pivot, mesh, col, open: false, ang: 0, target: 0 };
+  D.set = (open, instant) => {
+    D.open = open; D.target = open ? swing * 1.6 : 0; col.on = !open;
+    if (instant) { D.ang = D.target; pivot.rotation.y = D.ang; }
+  };
+  onTick(dt => { D.ang = damp(D.ang, D.target, 5, dt); pivot.rotation.y = D.ang; });
+  act(mesh, () => label ? label(D) : tr(D.open ? 'door.close' : 'door.open'), () => {
+    D.set(!D.open); sfx(D.open ? sound : 'doorClose');
+    if (D.open && onOpen) onOpen(D);
+  });
+  return D;
+}
+
+// Низкополигональный человек. Смотрит в +z; голова поворачивается к игроку.
+function person({ shirt, pants = 0x24262b, skin = 0xd9ad90, hair = 0x3b2a1f, sit = false, scarf = null, cap = null, apron = null }) {
+  const g = new THREE.Group(), M = c => new THREE.MeshLambertMaterial({ color: c });
+  const cyl = (rt, rb, h, c) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 10), M(c));
+  const hipY = sit ? 0.5 : 0.88;
+  for (const s of [-1, 1]) {
+    if (sit) {
+      const th = cyl(0.075, 0.08, 0.44, pants); th.rotation.x = Math.PI / 2; th.position.set(s * 0.1, hipY, 0.2); g.add(th);
+      const sh = cyl(0.065, 0.06, 0.48, pants); sh.position.set(s * 0.1, 0.24, 0.41); g.add(sh);
+    } else { const lg = cyl(0.075, 0.065, 0.88, pants); lg.position.set(s * 0.1, 0.44, 0); g.add(lg); }
+    const arm = cyl(0.055, 0.05, 0.58, shirt); arm.position.set(s * 0.27, hipY + 0.33, sit ? 0.08 : 0); arm.rotation.z = s * 0.12; if (sit) arm.rotation.x = -0.6; g.add(arm);
+  }
+  const torso = cyl(0.2, 0.22, 0.62, shirt); torso.position.y = hipY + 0.31; g.add(torso);
+  if (apron) { const ap = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.02), M(apron)); ap.position.set(0, hipY + 0.27, 0.205); g.add(ap); }
+  const head = new THREE.Group(); head.position.y = hipY + 0.76; g.add(head);
+  const neck = cyl(0.05, 0.06, 0.1, skin); neck.position.y = -0.12; head.add(neck);
+  const sk = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 10), M(skin)); sk.scale.set(0.95, 1.1, 1); head.add(sk);
+  const hr = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10, 0, Math.PI * 2, 0, Math.PI * (scarf ? 0.62 : 0.52)), M(scarf || hair));
+  hr.position.set(0, 0.02, -0.012); hr.rotation.x = -0.3; head.add(hr);
+  if (cap) {
+    const cp = cyl(0.135, 0.135, 0.07, cap); cp.position.y = 0.12; head.add(cp);
+    const vz = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.015, 0.1), M(cap)); vz.position.set(0, 0.095, 0.14); head.add(vz);
+  }
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), M(0x111111)); e.position.set(s * 0.042, 0.02, 0.112); head.add(e); }
+  g.userData.head = head;
+  return g;
+}
+// голова NPC следит за игроком (только по горизонтали, ±70°)
+function headTrack(npc, maxA = 1.2) {
+  const v = new THREE.Vector3();
+  onTick(dt => {
+    npc.getWorldPosition(v);
+    const a = Math.atan2(camera.position.x - v.x, camera.position.z - v.z) - npc.rotation.y;
+    const wrapped = Math.atan2(Math.sin(a), Math.cos(a));
+    const near = camera.position.distanceTo(v) < 7;
+    npc.userData.head.rotation.y = damp(npc.userData.head.rotation.y, near ? clamp(wrapped, -maxA, maxA) : 0, 3, dt);
+  });
+}
+
+const MAT = {};
+function initMaterials() {
+  const L = o => new THREE.MeshLambertMaterial(o);
+  // Фасады без расчёта освещения: «свет» запечён в текстуру, грани башни затенены по-разному (+x,-x,+y,-y,+z,-z)
+  const F = texFacade();
+  F.map.repeat.set(1 / 24, 1 / 24);
+  const shade = [1.0, 0.8, 0.7, 0.7, 0.92, 0.86];
+  MAT.facades = [0xffffff, 0xece6dc, 0xdde2e8, 0xf2e6d6, 0xd2cfc9].map(c =>
+    shade.map(s => new THREE.MeshBasicMaterial({ map: F.map, color: new THREE.Color(c).multiplyScalar(s) })));
+  MAT.invisible = new THREE.MeshBasicMaterial({ visible: false });
+  MAT.wallpaper = L({ map: texWallpaper() });
+  MAT.lino = L({ map: texLino() });
+  MAT.paint = L({ map: texPaint() });
+  MAT.corrFloor = L({ map: texGridTiles(3, 8, '#7a4a32', '#b39570', '#4a3a2a') });
+  MAT.storeFloor = L({ map: texGridTiles(5, 4, '#d3d4d0', '#c7c9c5', '#9a9c98', 8) });
+  MAT.ceiling = L({ map: texCeiling() });
+  MAT.whitewash = L({ color: 0xdcd8cf });
+  MAT.plaster = L({ color: 0x9c9890 });
+  MAT.concrete = L({ map: texConcrete('#86878a', 3, false) });
+  MAT.snowy = L({ map: texConcrete('#c2c6cb', 4, true) });
+  MAT.rust = L({ map: texRust() });
+  MAT.rustLight = L({ map: MAT.rust.map, color: 0xcfb8a8 });
+  MAT.steel = L({ color: 0x4b4e52 });
+  MAT.dark = L({ color: 0x1c1d20 });
+  MAT.white = L({ color: 0xe9e7e0 });
+  MAT.wood = L({ color: 0x6b4a30 });
+  MAT.brass = L({ color: 0xc9a84a, emissive: 0x2a2008 });
+  MAT.glass = L({ color: 0x9fb6c0, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
+  MAT.glassStore = L({ color: 0x3a4652, emissive: 0x0a0c12, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide });
+  // UV везде в метрах, поэтому repeat = 1 / (метров на повтор текстуры)
+  const rep = (m, w, h = w) => m.map.repeat.set(1 / w, 1 / h);
+  rep(MAT.wallpaper, 0.6); rep(MAT.lino, 1.6); rep(MAT.paint, 3); rep(MAT.corrFloor, 1.2);
+  rep(MAT.storeFloor, 2.4); rep(MAT.ceiling, 1.2); rep(MAT.concrete, 2.2); rep(MAT.snowy, 2.6); rep(MAT.rust, 1.4);
+  MAT.band = new THREE.MeshBasicMaterial({ map: texBand() });
+  MAT.band.map.repeat.set(1 / 3.2, 1 / 0.8); MAT.band.map.offset.set(0, -5.8 / 0.8);
+  MAT.neon = new THREE.MeshBasicMaterial({ color: 0xffa6f6 });
+  MAT.lampWarm = new THREE.MeshBasicMaterial({ color: 0xfff0c8 });
+  MAT.tube = new THREE.MeshBasicMaterial({ color: 0xf4f8ff });
+}
+// ================= Мир снаружи =================
+// Башня A (дом): x∈[-24,0], z∈[-18,24]. Восточный фасад x=0 смотрит на мост.
+// Маршрут идёт вдоль оси z≈0: тамбур → дверь → галерея (y=0) → лестница → мост (y=3) → магазин (x≥12.5).
+
+function insideAny(x, y, z) {
+  for (const b of interiors) if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1 && z > b.z0 && z < b.z1) return b;
+  return null;
+}
+
+// Перила вдоль оси: стойки, три горизонтали и невидимый барьер (с перил не упасть)
+function rail(x0, z0, x1, z1, y, mat = MAT.rust, h = 1.05) {
+  const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 1.3));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+    box(x - 0.025, y, z - 0.025, x + 0.025, y + h, z + 0.025, mat, { col: false, ray: false });
+  }
+  const ax = Math.abs(x0 - x1) < 1e-6, za = Math.min(z0, z1), zb = Math.max(z0, z1), xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  const bar = (yy, s) => ax ? box(x0 - s, yy - s, za, x0 + s, yy + s, zb, mat, { col: false })
+                            : box(xa, yy - s, z0 - s, xb, yy + s, z0 + s, mat, { col: false });
+  const top = bar(y + h, 0.03); bar(y + h * 0.55, 0.012); bar(y + 0.1, 0.012);
+  if (ax) addCol(x0 - 0.06, y - 1, za, x0 + 0.06, y + 3, zb, 'rail'); else addCol(xa, y - 1, z0 - 0.06, xb, y + 3, z0 + 0.06, 'rail');
+  return top;
+}
+
+function buildTowers() {
+  const F = i => MAT.facades[i % MAT.facades.length], A = F(0), INV = MAT.invisible;
+  // Башня A: всё, кроме пояса нашего этажа; грани, смотрящие внутрь пояса, не рисуем
+  box(-24, -420, -18, 0, -0.1, 24, [A[0], A[1], INV, A[3], A[4], A[5]], { uv: true, col: false });
+  box(-24, 3.0, -18, 0, 420, 24, [A[0], A[1], A[2], INV, A[4], A[5]], { uv: true, col: false });
+  box(-24, -0.1, -18, -23.7, 3.0, 24, F(0), { uv: true, col: false });
+  box(-24, -0.1, 23.7, 0, 3.0, 24, F(0), { uv: true, col: false });
+  box(-24, -0.1, -18, 0, 3.0, -17.7, F(0), { uv: true, col: false });
+  // восточный фасад пояса: проём двери z∈[-0.45,0.45] и окно квартиры z∈[12.84,14.16], y∈[0.89,2.34]
+  NEAR = true;
+  const P = MAT.plaster, E = (z0, z1, y0, y1, inner) => box(-0.25, y0, z0, 0, y1, z1, [A[0], inner, P, P, P, P], { uv: true });
+  E(-18, -0.45, -0.1, 3.0, MAT.paint); E(-0.45, 0.45, 2.1, 3.0, MAT.paint); E(0.45, 5, -0.1, 3.0, MAT.paint);
+  E(5, 12.84, -0.1, 3.0, MAT.wallpaper); E(12.84, 14.16, -0.1, 0.89, MAT.wallpaper); E(12.84, 14.16, 2.34, 3.0, MAT.wallpaper);
+  E(14.16, 24, -0.1, 3.0, MAT.wallpaper);
+  NEAR = false;
+  interiors.push({ x0: -24, y0: -0.3, z0: -18, x1: 0, y1: 3.0, z1: 24, kind: 'home' });
+
+  // Соседние башни — бесконечные вверх и вниз, туман прячет концы
+  const near = [[27, -21, 51, 15, 1, 6], [-6, 33, 18, 57, 2, 12], [36, 27, 60, 51, 3, 3], [3, -57, 27, -33, 4, 9],
+                [39, -60, 63, -36, 2, 15], [-48, -51, -24, -30, 1, 18], [-51, 36, -27, 60, 3, 21], [-60, -12, -36, 12, 4, 0]];
+  for (const [x0, z0, x1, z1, mi, du] of near) box(x0, -420, z0, x1, 420, z1, F(mi), { uv: true, du, col: false });
+  addCol(27, 2, -21, 28, 8, 15, 'wall'); // торец моста упирается в башню C
+
+  // Дальнее кольцо
+  const R = rnd(4242);
+  for (let gx = -3; gx <= 3; gx++) for (let gz = -3; gz <= 3; gz++) {
+    if (Math.abs(gx) <= 1 && Math.abs(gz) <= 1) continue;
+    if (R() < 0.25) continue;
+    const s = 3 * (6 + ((R() * 5) | 0)), cx = gx * 48 + (R() - 0.5) * 18, cz = gz * 48 + (R() - 0.5) * 18;
+    const x0 = Math.round((cx - s / 2) / 3) * 3, z0 = Math.round((cz - s / 2) / 3) * 3;
+    box(x0, -420, z0, x0 + s, 420, z0 + 3 * (6 + ((R() * 5) | 0)), F((R() * 5) | 0), { uv: true, du: 3 * ((R() * 8) | 0), col: false });
+  }
+
+  // Балконы ближних башен (инстансы): плита + ограждение, на пролётах с окнами
+  const towersB = [[-24, -18, 0, 24], ...near.slice(0, 5).map(t => t.slice(0, 4))];
+  const slabs = [], walls = [], RB = rnd(77), dummy = new THREE.Object3D();
+  const skip = (x, y, z) => (x > 0 && x < 2 && z > -4.5 && z < 4.5) || (x > 0 && x < 2 && y > -1 && y < 7 && z > -8 && z < 26) ||
+                            (x > 25 && x < 28 && y > -1 && y < 10 && z > -10 && z < 10);
+  for (const [x0, z0, x1, z1] of towersB) {
+    const faces = [[x1, 1, 0, z0, z1], [x0, -1, 0, z0, z1], [z1, 0, 1, x0, x1], [z0, 0, -1, x0, x1]];
+    for (const [at, nx, nz, a0, a1] of faces) for (let f = -14; f <= 14; f++) for (let a = a0 + 1.5; a < a1; a += 3) {
+      if (RB() > 0.3) continue;
+      const y = f * 3, cx = nx ? at + nx * 0.55 : a, cz = nz ? at + nz * 0.55 : a;
+      if (skip(cx, y, cz)) continue;
+      const along = nx ? [1.1, 2.5] : [2.5, 1.1];
+      slabs.push([cx, y - 0.08, cz, along[0], 0.16, along[1]]);
+      const fx = nx ? at + nx * 1.07 : a, fz = nz ? at + nz * 1.07 : a;
+      walls.push([fx, y + 0.5, fz, nx ? 0.07 : 2.5, 1.0, nz ? 0.07 : 2.5, RB()]);
+      for (const s of [-1.22, 1.22]) walls.push([nx ? at + nx * 0.55 : a + s, y + 0.5, nz ? at + nz * 0.55 : a + s, nx ? 1.1 : 0.06, 1.0, nz ? 1.1 : 0.06, RB()]);
+    }
+  }
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  const iSlab = new THREE.InstancedMesh(unit, MAT.plaster, slabs.length);
+  slabs.forEach(([x, y, z, sx, sy, sz], i) => { dummy.position.set(x, y, z); dummy.scale.set(sx, sy, sz); dummy.updateMatrix(); iSlab.setMatrixAt(i, dummy.matrix); });
+  const iWall = new THREE.InstancedMesh(unit, new THREE.MeshLambertMaterial({ color: 0xffffff }), walls.length);
+  const tones = [0x7a7a76, 0x5a3a2a, 0x8d877d, 0x3f4a52, 0x6e5a4a].map(c => new THREE.Color(c));
+  walls.forEach(([x, y, z, sx, sy, sz, r], i) => { dummy.position.set(x, y, z); dummy.scale.set(sx, sy, sz); dummy.updateMatrix(); iWall.setMatrixAt(i, dummy.matrix); iWall.setColorAt(i, tones[(r * tones.length) | 0]); });
+  scene.add(iSlab, iWall);
+}
+
+// Галерея у двери, стопка таких же галерей выше и ниже, наша лестница на мост
+function buildGallery() {
+  const S = [MAT.concrete, MAT.concrete, MAT.snowy, MAT.concrete, MAT.concrete, MAT.concrete];
+  NEAR = true;
+  box(0, -0.3, -3, 2.4, 0, 3, S, { uv: true, surf: 'snow' });
+  box(0, 2.45, -1.1, 1.3, 2.6, 1.1, MAT.concrete, { uv: true, col: false });
+  box(0.02, 1.98, -0.78, 0.16, 2.14, -0.58, MAT.lampWarm, { col: false });
+  const pl = new THREE.PointLight(0xffd59a, 1.1, 9); pl.position.set(0.6, 2.1, -0.4); scene.add(pl);
+  const [pc, pg] = cnv(320, 100); pg.fillStyle = '#1f3f8a'; pg.fillRect(0, 0, 320, 100); pg.strokeStyle = '#f2f2ea'; pg.lineWidth = 6; pg.strokeRect(8, 8, 304, 84);
+  txt(pg, 'ЭТАЖ 5000', 160, 52, `34px ${FONT_D}`, '#f2f2ea', 'center');
+  decal(toTex(pc, false), 0.86, 0.27, 0.012, 2.28, 0, '+x');
+  const top = rail(2.37, -3, 2.37, -0.66, 0);
+  act(top, 'act.rail', () => think(tr('th.rail')));
+  rail(2.37, 0.66, 2.37, 3, 0); rail(0, -2.97, 2.4, -2.97, 0); rail(0, 2.97, 2.4, 2.97, 0);
+  NEAR = false;
+  // те же галереи на других этажах — видно, что этажей тысячи
+  for (let k = -12; k <= 10; k++) {
+    if (k === 0) continue;
+    const y = k * 3;
+    box(0, y - 0.3, -3, 2.4, y, 3, S, { uv: true, col: false });
+    box(2.34, y + 1.02, -3, 2.4, y + 1.08, 3, MAT.rust, { col: false });
+    for (const z of [-2.95, -1, 1, 2.95]) box(2.35, y, z - 0.025, 2.4, y + 1.05, z + 0.025, MAT.rust, { col: false });
+    if (k % 3 === 0) box(0.02, y + 2.18, -0.16, 0.16, y + 2.34, 0.16, MAT.lampWarm, { col: false });
+  }
+
+  // Наша лестница: два марша по 9 подъёмов (0.167 м), площадка на 1.5 м
+  NEAR = true;
+  const r = 1.5 / 9, run = 0.3, z0 = -0.6, z1 = 0.6;
+  for (let i = 1; i <= 8; i++) { const x = 2.4 + (i - 1) * run; box(x, i * r - 0.05, z0, x + run, i * r, z1, MAT.rust, { surf: 'metal' }); }
+  box(4.8, 1.5 - 0.08, z0, 6.3, 1.5, z1, MAT.rust, { surf: 'metal' });
+  for (let i = 1; i <= 8; i++) { const x = 6.3 + (i - 1) * run; box(x, 1.5 + i * r - 0.05, z0, x + run, 1.5 + i * r, z1, MAT.rust, { surf: 'metal' }); }
+  NEAR = false;
+  for (const z of [-0.66, 0.66]) {
+    beam([2.4, -0.12, z], [4.8, 1.22, z], 0.12, MAT.rust); beam([4.8, 1.38, z], [6.3, 1.38, z], 0.12, MAT.rust); beam([6.3, 1.38, z], [8.7, 2.72, z], 0.12, MAT.rust);
+    beam([2.4, 0.95, z], [4.8, 2.28, z], 0.05, MAT.rust); beam([4.8, 2.28, z], [6.3, 2.45, z], 0.05, MAT.rust); beam([6.3, 2.45, z], [8.7, 3.95, z], 0.05, MAT.rust);
+    for (const [x, y] of [[2.4, 0], [3.6, 0.67], [4.8, 1.33], [6.3, 1.5], [7.5, 2.17], [8.7, 2.83]]) beam([x, y, z], [x, y + 1.0, z], 0.045, MAT.rust);
+  }
+  addCol(2.4, -1, 0.62, 8.7, 6, 0.75, 'rail'); addCol(2.4, -1, -0.75, 8.7, 6, -0.62, 'rail');
+  beam([5.55, 1.42, 0], [5.55, -260, 0], 0.16, MAT.rust);
+  beam([5.55, 1.0, 0], [0, -2.0, 0], 0.09, MAT.rust);
+}
+
+// Мост с магазином: плита на опорах, уходящих в бездну
+function buildDeck() {
+  const S = [MAT.concrete, MAT.concrete, MAT.snowy, MAT.concrete, MAT.concrete, MAT.concrete];
+  NEAR = true;
+  box(8.7, 2.55, -7, 27, 3.0, 7, S, { uv: true, surf: 'snow' });
+  rail(8.75, -7, 8.75, -0.66, 3.0); rail(8.75, 0.66, 8.75, 7, 3.0);
+  rail(8.7, -6.95, 27, -6.95, 3.0); rail(8.7, 6.95, 27, 6.95, 3.0);
+  NEAR = false;
+  for (const z of [-6.5, 6.5]) box(8.7, 2.05, z - 0.2, 27, 2.55, z + 0.2, MAT.rust, { uv: true, col: false });
+  for (const x of [10, 18, 26]) for (const z of [-6.5, 6.5]) box(x - 0.22, -300, z - 0.22, x + 0.22, 2.05, z + 0.22, MAT.rust, { uv: true, col: false });
+  for (let y = 2; y > -66; y -= 6) for (const z of [-6.5, 6.5]) for (const [xa, xb] of [[10, 18], [18, 26]]) {
+    beam([xa, y, z], [xb, y - 6, z], 0.12, MAT.rust); beam([xb, y, z], [xa, y - 6, z], 0.12, MAT.rust);
+  }
+  for (let y = 2; y > -66; y -= 12) for (const x of [10, 18, 26]) beam([x, y, -6.5], [x, y, 6.5], 0.14, MAT.rust);
+  // служебная дверь в башню C
+  NEAR = true;
+  const sd = decal(texMetalDoor(['ПОСТОРОННИМ', 'ВХОД', 'ВОСПРЕЩЁН'], '#3b3f44'), 1.0, 2.1, 26.99, 4.05, 3.6, '-x');
+  act(sd, 'act.service', () => { sfx('locked'); think(tr('th.service')); });
+  NEAR = false;
+}
+
+// Коробка магазина: витрины, фиолетовый пояс, козырёк с розовыми точками, вывеска, автоматические двери
+let storeDoor = null;
+function buildStoreShell() {
+  const x0 = 12.5, x1 = 24.5, z0 = -5.5, z1 = 5.5, y0 = 3.0, yg = 5.8;
+  NEAR = true;
+  box(x0, y0, z0, x1, y0 + 0.012, z1, MAT.storeFloor, { uv: true, col: false });
+  const G = MAT.glassStore;
+  box(x0 - 0.03, y0, z0, x0 + 0.03, yg, -0.9, G); box(x0 - 0.03, y0, 0.9, x0 + 0.03, yg, z1, G);
+  box(x0 - 0.05, 5.2, -0.9, x0 + 0.05, yg, 0.9, MAT.steel);
+  box(x0, y0, z0 - 0.03, x1, yg, z0 + 0.03, G); box(x0, y0, z1 - 0.03, x1, yg, z1 + 0.03, G);
+  box(x1 - 0.1, y0, z0, x1 + 0.1, yg, z1, [MAT.plaster, MAT.white, MAT.plaster, MAT.plaster, MAT.plaster, MAT.plaster], { uv: true });
+  // цоколь и импосты
+  box(x0 - 0.06, y0, z0, x0 + 0.06, y0 + 0.32, -0.9, MAT.steel, { col: false }); box(x0 - 0.06, y0, 0.9, x0 + 0.06, y0 + 0.32, z1, MAT.steel, { col: false });
+  for (const z of [z0, -3.7, -1.9, -0.9, 0.9, 1.9, 3.7, z1]) box(x0 - 0.06, y0, z - 0.03, x0 + 0.06, yg, z + 0.03, MAT.steel, { col: false });
+  for (const zz of [z0, z1]) { for (let x = x0; x <= x1 + 0.01; x += 2.4) box(x - 0.03, y0, zz - 0.06, x + 0.03, yg, zz + 0.06, MAT.steel, { col: false });
+    box(x0, y0, zz - 0.06, x1, y0 + 0.32, zz + 0.06, MAT.steel, { col: false }); }
+  NEAR = false;
+  // фиолетовый пояс, крыша, козырёк
+  box(x0 - 0.08, yg, z0 - 0.08, x1 + 0.08, 6.6, z1 + 0.08, MAT.band, { uv: true, col: false });
+  box(x0 - 0.2, 6.6, z0 - 0.2, x1 + 0.2, 6.78, z1 + 0.2, MAT.dark, { col: false });
+  box(11.75, 5.6, z0 - 0.1, x0 - 0.08, 5.76, z1 + 0.1, MAT.dark, { col: false });
+  for (let z = -5.0; z <= 5.01; z += 0.8) {
+    const d = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), MAT.neon); d.rotation.x = Math.PI / 2; d.position.set(12.05, 5.595, z); scene.add(d);
+  }
+  box(11.76, 5.76, -3.75, 11.86, 6.5, 1.05, MAT.dark, { col: false });
+  decal(texSign(), 4.6, 0.66, 11.755, 6.13, -1.35, '-x', { basic: true });
+  act(decal(texPoster(), 0.62, 0.87, x0 - 0.04, 4.35, -3.0, '-x', { ray: false }), 'act.poster', () => think(tr('th.poster')));
+  const purple = new THREE.PointLight(0xc070ff, 1.9, 13); purple.position.set(11.2, 5.1, 0); scene.add(purple);
+  // автоматические раздвижные двери
+  const dm = MAT.glassStore, L = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 0.9), dm), Rr = L.clone();
+  const fr = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.05), MAT.steel);
+  L.add(fr.clone().translateZ(0.43)); Rr.add(fr.clone().translateZ(-0.43));
+  scene.add(L, Rr);
+  const col = addCol(x0 - 0.1, y0, -0.9, x0 + 0.1, 5.2, 0.9, 'door');
+  storeDoor = { L, R: Rr, col, s: 0, open: false };
+  const setDoor = () => { L.position.set(x0 + 0.1, y0 + 1.1, -0.45 - storeDoor.s * 0.88); Rr.position.set(x0 + 0.1, y0 + 1.1, 0.45 + storeDoor.s * 0.88); };
+  setDoor();
+  onTick(dt => {
+    const dx = camera.position.x - x0, dz = camera.position.z, close = Math.abs(dx) < 2.3 && Math.abs(dz) < 1.6 && camera.position.y > 3.5;
+    const want = close && storeDoorAllowed(dx < 0);
+    if (want && !storeDoor.open) sfx(dx < 0 ? 'chime' : 'slide');
+    storeDoor.open = want;
+    storeDoor.s = damp(storeDoor.s, want ? 1 : 0, 6, dt);
+    col.on = storeDoor.s < 0.7; setDoor();
+  });
+  interiors.push({ x0, y0: 2.9, z0, x1, y1: yg, z1, kind: 'store' });
+}
+
+// Другие мосты между A и C, киоск, аптечный крест, провода
+function buildDistant() {
+  const lamp = MAT.lampWarm;
+  const extra = [[-9, 12, 4], [-24, -6, 3], [-39, -14, 3], [15, 9, 3.5], [27, -2, 3], [-57, 4, 4], [42, -12, 3], [-18, 18, 2.5]];
+  for (const [y, zc, w] of extra) {
+    box(0, y - 0.45, zc - w / 2, 27, y, zc + w / 2, MAT.concrete, { uv: true, col: false });
+    for (const s of [-1, 1]) box(0, y + 1.0, zc + s * w / 2 - 0.03, 27, y + 1.06, zc + s * w / 2 + 0.03, MAT.rust, { col: false });
+    for (let x = 3; x < 27; x += 3) for (const s of [-1, 1]) box(x - 0.02, y, zc + s * w / 2 - 0.02, x + 0.02, y + 1.0, zc + s * w / 2 + 0.02, MAT.rust, { col: false });
+    for (let x = 4.5; x < 27; x += 6) box(x - 0.08, y + 2.4, zc - 0.08, x + 0.08, y + 2.55, zc + 0.08, lamp, { col: false });
+  }
+  const kiosk = new THREE.MeshLambertMaterial({ color: 0x8a6a40, emissive: 0x7a4a14 });
+  box(11, -9, 10.3, 15, -6.6, 13.7, kiosk, { col: false });
+  const [kc, kg] = cnv(512, 96); kg.fillStyle = '#1e2a24'; kg.fillRect(0, 0, 512, 96); txt(kg, 'РЕМОНТ ОБУВИ', 256, 50, `40px ${FONT_D}`, '#ffe9a8', 'center');
+  decal(toTex(kc, false), 3.6, 0.6, 13, -6.25, 10.28, '-z', { basic: true, ray: false });
+  const green = new THREE.MeshBasicMaterial({ color: 0x3dff7a });
+  box(20, -21.6, -6.1, 20.9, -21.3, -5.9, green, { col: false }); box(20.3, -21.9, -6.1, 20.6, -21.0, -5.9, green, { col: false });
+  // провода с провисом
+  const cm = new THREE.LineBasicMaterial({ color: 0x16171a }), R = rnd(99);
+  const cable = (a, b, sag) => {
+    const pts = []; for (let i = 0; i <= 28; i++) { const t = i / 28; pts.push(new THREE.Vector3(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t)); }
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cm));
+  };
+  for (let i = 0; i < 16; i++) { const y = -20 + R() * 55, z = -16 + R() * 30; cable([0, y, z], [27, y + (R() - 0.5) * 4, Math.max(-20, Math.min(14, z + (R() - 0.5) * 10))], 1 + R() * 3); }
+  for (let i = 0; i < 8; i++) { const y = -10 + R() * 40, x = -4 + R() * 20; cable([x, y, 24], [x + (R() - 0.5) * 6, y + (R() - 0.5) * 3, 33], 0.6 + R()); }
+  for (let i = 0; i < 6; i++) { const y = 6 + R() * 26, z = -15 + R() * 28; cable([27 + 24, y, z], [36 + R() * 20, y + 2, 27], 1 + R() * 2); }
+}
+
+// Снег: частицы в коробке вокруг камеры; внутри помещений не идёт
+const SNOW_N = 4200, SNOW_BOX = [46, 30, 46];
+let snow, snowPos, snowVel;
+function buildSnow() {
+  snowPos = new Float32Array(SNOW_N * 3); snowVel = new Float32Array(SNOW_N);
+  const R = rnd(1);
+  for (let i = 0; i < SNOW_N; i++) {
+    snowPos[i * 3] = (R() - 0.5) * SNOW_BOX[0]; snowPos[i * 3 + 1] = (R() - 0.5) * SNOW_BOX[1]; snowPos[i * 3 + 2] = (R() - 0.5) * SNOW_BOX[2];
+    snowVel[i] = 0.7 + R() * 1.0;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+  snow = new THREE.Points(g, new THREE.PointsMaterial({ map: texSnow(), size: 0.055, transparent: true, depthWrite: false, opacity: 0.9 }));
+  snow.frustumCulled = false; scene.add(snow);
+}
+function updateSnow(dt, t, wind) {
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, [W, H, D] = SNOW_BOX;
+  const wrap = (v, c, s) => c + ((((v - c) + s / 2) % s) + s) % s - s / 2;
+  for (let i = 0; i < SNOW_N; i++) {
+    const k = i * 3, ph = i * 1.37;
+    let x = snowPos[k] + (wind * (0.6 + (i % 7) * 0.09) + Math.sin(t * 1.3 + ph) * 0.35) * dt;
+    let y = snowPos[k + 1] - snowVel[i] * (1 + wind * 0.12) * dt;
+    let z = snowPos[k + 2] + (Math.cos(t * 0.9 + ph) * 0.3 + wind * 0.22) * dt;
+    x = wrap(x, cx, W); y = wrap(y, cy, H); z = wrap(z, cz, D);
+    if (insideAny(x, y, z)) y = cy + H / 2 - 0.01;
+    snowPos[k] = x; snowPos[k + 1] = y; snowPos[k + 2] = z;
+  }
+  snow.geometry.attributes.position.needsUpdate = true;
+}
+// ================= Интерьеры: квартира 20000, коридор, тамбур, магазин =================
+let aptDoor = null, extDoor = null, tvTex = null;
+
+function buildHome() {
+  NEAR = true;
+  const WW = MAT.whitewash, P = MAT.paint, WP = MAT.wallpaper;
+  // --- коридор x∈[-8.2,-5.7], z∈[-4,22]
+  box(-8.2, -0.1, -4, -5.5, 0, 22, MAT.corrFloor, { uv: true, surf: 'tile' });
+  box(-8.2, 2.7, -4, -5.5, 2.8, 22, WW, { col: false });
+  box(-8.4, -0.1, -4.2, -8.2, 3.0, 22.2, P, { uv: true });
+  box(-8.4, -0.1, -4.2, -5.5, 3.0, -4.0, P, { uv: true });
+  box(-8.4, -0.1, 22.0, -5.5, 3.0, 22.2, P, { uv: true });
+  const EW = (z0, z1, y0 = -0.1, y1 = 3.0) => box(-5.7, y0, z0, -5.5, y1, z1, [WP, P, WW, WW, WW, WW], { uv: true });
+  EW(-4.0, -1.25); EW(1.25, 10.3); EW(10.3, 11.2, 2.05); EW(11.2, 22.0);
+  // --- тамбур x∈[-5.5,-0.25], z∈[-1.25,1.25]
+  box(-5.5, -0.1, -1.25, -0.25, 0, 1.25, MAT.corrFloor, { uv: true, surf: 'tile' });
+  box(-5.7, 2.7, -1.25, -0.25, 2.8, 1.25, WW, { col: false });
+  box(-5.7, -0.1, -1.45, -0.25, 3.0, -1.25, P, { uv: true });
+  box(-5.7, -0.1, 1.25, -0.25, 3.0, 1.45, P, { uv: true });
+  decal(texStencil('5000'), 1.7, 0.85, -3.1, 1.95, 1.24, '-z', { transparent: true });
+  extDoor = hingedDoor({ plane: 'x', at: -0.12, a0: -0.45, a1: 0.45, h: 2.08, swing: 1, sound: 'doorMetal',
+    mat: new THREE.MeshLambertMaterial({ map: texMetalDoor(['ЗАКРЫВАЙТЕ', 'ДВЕРЬ!']) }),
+    label: D => tr(D.open ? 'door.close' : 'door.ext'), onOpen: () => S.flags.ext = true });
+  // свет в коридоре: одна лампа мигает
+  const bulb = (z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), MAT.lampWarm.clone()); m.position.set(-6.95, 2.56, z); scene.add(m);
+    box(-6.96, 2.62, z - 0.01, -6.94, 2.7, z + 0.01, MAT.dark, { col: false, ray: false }); return m; };
+  const b1 = bulb(1.5), b2 = bulb(14);
+  const l1 = new THREE.PointLight(0xffe6c0, 0.85, 11); l1.position.set(-6.95, 2.4, 1.5); scene.add(l1);
+  const l2 = new THREE.PointLight(0xffe6c0, 0.8, 11); l2.position.set(-6.95, 2.4, 14); scene.add(l2);
+  let fl = 0;
+  onTick((dt, t) => { fl -= dt; if (fl < 0) fl = Math.random() < 0.12 ? 0.05 + Math.random() * 0.12 : 0.15 + Math.random() * 1.6;
+    const on = fl > 0.12 || Math.random() > 0.5; l1.intensity = on ? 0.85 : 0.08; b1.material.color.setHex(on ? 0xfff0c8 : 0x3a3428); });
+  // двери соседей (наклейки) — можно постучать
+  const nd = (num, x, z, face) => { const d = decal(texDoor(num, '#5a3326'), 0.9, 2.05, x, 1.025, z, face);
+    act(d, () => tr('act.knock', num), () => { sfx('knock'); think(tr('nb.' + num)); }); };
+  nd(19997, -8.19, 2.5, '+x');
+  nd(19998, -8.19, 13, '+x');
+  nd(19999, -5.71, 6, '-x');
+  nd(19996, -5.71, 18, '-x');
+  // лифт и объявление
+  box(-7.6, 0, 21.9, -6.3, 2.3, 22.0, MAT.steel, { col: false });
+  const lift = decal(texLift(), 1.1, 2.1, -6.95, 1.05, 21.89, '-z');
+  act(lift, 'act.lift', () => { sfx('button'); setTimeout(() => think(tr('th.lift')), 600); });
+  const btn = box(-7.86, 1.2, 21.92, -7.74, 1.36, 22.0, new THREE.MeshBasicMaterial({ color: 0x8a1a10 }), { col: false });
+  act(btn, 'act.button', () => { sfx('button'); think(tr('th.button')); });
+  const notice = decal(texNotice(), 0.8, 1.0, -8.19, 1.55, 19.6, '+x');
+  act(notice, 'act.notice', () => dialog([{ who: tr('notice.who'), text: tr('notice.text') }, { who: tr('notice.who2'), text: tr('notice.text2') }]));
+  // мусоропровод
+  box(-7.35, 0, -4.0, -6.55, 2.7, -3.72, MAT.steel, { col: true });
+  const hatch = box(-7.22, 0.8, -3.73, -6.68, 1.28, -3.66, MAT.rust, { col: false });
+  act(hatch, 'act.chute', () => { sfx('clang'); think(tr('th.chute')); });
+
+  // --- квартира x∈[-5.5,-0.25], z∈[9.2,15]
+  box(-5.5, -0.1, 9.2, -0.25, 0, 15, MAT.lino, { uv: true, surf: 'lino' });
+  box(-5.5, 2.7, 9.2, -0.25, 2.8, 15, WW, { col: false });
+  box(-5.5, -0.1, 9.0, -0.25, 3.0, 9.2, WP, { uv: true });
+  box(-5.5, -0.1, 15.0, -0.25, 3.0, 15.2, WP, { uv: true });
+  const base = MAT.wood;
+  box(-5.5, 0, 9.2, -0.25, 0.08, 9.22, base, { col: false, ray: false }); box(-5.5, 0, 14.98, -0.25, 0.08, 15, base, { col: false, ray: false });
+  aptDoor = hingedDoor({ plane: 'x', at: -5.6, a0: 10.3, a1: 11.2, h: 2.05, swing: 1, mat: new THREE.MeshLambertMaterial({ map: texDoor(20000, '#4a2a20') }),
+    label: D => tr(D.open ? 'door.close' : 'door.open') });
+  // окно
+  const fr = MAT.white;
+  box(-0.2, 0.86, 12.8, -0.1, 0.93, 14.2, fr, { col: false }); box(-0.2, 2.3, 12.8, -0.1, 2.38, 14.2, fr, { col: false });
+  box(-0.2, 0.89, 12.8, -0.1, 2.34, 12.88, fr, { col: false }); box(-0.2, 0.89, 14.12, -0.1, 2.34, 14.2, fr, { col: false });
+  box(-0.2, 0.89, 13.47, -0.1, 2.34, 13.53, fr, { col: false }); box(-0.2, 1.88, 12.84, -0.1, 1.92, 14.16, fr, { col: false });
+  const glass = box(-0.15, 0.89, 12.84, -0.12, 2.34, 14.16, MAT.glass);
+  act(glass, 'act.window', () => think(tr(S.flags.paid ? 'th.windowPaid' : 'th.window')));
+  box(-0.55, 0.86, 12.7, -0.2, 0.9, 14.3, MAT.white);
+  box(-0.32, 0.15, 12.9, -0.24, 0.72, 14.1, MAT.white, { col: false });
+  for (let z = 12.95; z < 14.1; z += 0.09) box(-0.36, 0.17, z, -0.24, 0.7, z + 0.05, MAT.white, { col: false, ray: false });
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.055, 0.12, 12), new THREE.MeshLambertMaterial({ color: 0xa0522d }));
+  pot.position.set(-0.38, 0.96, 13.0); scene.add(pot);
+  const cac = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.2, 10), new THREE.MeshLambertMaterial({ color: 0x3f7a3a }));
+  cac.position.set(-0.38, 1.12, 13.0); scene.add(cac); rayMeshes.push(pot); act(cac, 'act.cactus', () => think(tr('th.cactus')));
+  // диван и ковёр
+  const sofaM = new THREE.MeshLambertMaterial({ color: 0x5b5a3c });
+  const sofa = box(-4.75, 0, 14.05, -2.45, 0.44, 14.98, sofaM, { surf: 'lino' });
+  box(-4.75, 0.44, 14.72, -2.45, 0.98, 14.98, sofaM); box(-4.95, 0, 14.05, -4.75, 0.62, 14.98, sofaM); box(-2.45, 0, 14.05, -2.25, 0.62, 14.98, sofaM);
+  // невидимый объём дивана — чтобы в него было легко попасть взглядом
+  const sofaHit = box(-4.95, 0, 14.0, -2.25, 1.05, 14.98, MAT.invisible, { col: false });
+  for (const m of [sofa, sofaHit]) act(m, () => tr(S.flags.paid && S.flags.home ? 'act.sofaEnd' : 'act.sofa'), () => S.flags.paid && S.flags.home ? startEnding() : think(tr('th.sofa')));
+  const carpet = decal(texCarpet(), 2.4, 1.5, -3.6, 1.68, 14.99, '-z');
+  act(carpet, 'act.carpet', () => think(tr('th.carpet')));
+  // стол, компьютер
+  box(-0.95, 0.72, 9.6, -0.27, 0.76, 11.6, MAT.wood);
+  for (const z of [9.65, 11.5]) box(-0.92, 0, z, -0.86, 0.72, z + 0.05, MAT.wood, { col: false, ray: false });
+  box(-0.62, 0.76, 10.15, -0.52, 1.24, 11.05, MAT.dark, { col: false });
+  const mon = decal(texMonitor(), 0.82, 0.44, -0.625, 1.0, 10.6, '-x', { basic: true });
+  act(mon, 'act.monitor', () => think(tr('th.monitor')));
+  box(-0.85, 0.76, 10.3, -0.7, 0.78, 10.9, MAT.dark, { col: false });
+  box(-1.55, 0.42, 10.3, -1.1, 0.48, 10.8, MAT.dark); box(-1.6, 0.48, 10.25, -1.54, 1.0, 10.85, MAT.dark, { col: false });
+  // холодильник
+  const fridge = box(-5.45, 0, 9.25, -4.75, 1.62, 9.92, new THREE.MeshLambertMaterial({ color: 0xe8e6de }));
+  box(-4.76, 0.95, 9.82, -4.72, 1.35, 9.87, MAT.steel, { col: false });
+  act(fridge, 'act.fridge', () => { sfx('fridge'); think(tr('th.fridge')); S.flags.fridge = true; });
+  // телевизор со «снегом»
+  box(-3.6, 0, 9.22, -2.6, 0.5, 9.75, MAT.wood);
+  const tvBody = box(-3.45, 0.5, 9.3, -2.75, 1.05, 9.85, new THREE.MeshLambertMaterial({ color: 0x3a3835 }));
+  tvStep(); tvTex = new THREE.DataTexture(tvData, 64, 48, THREE.RGBAFormat); tvTex.needsUpdate = true;
+  decal(tvTex, 0.52, 0.4, -3.1, 0.79, 9.856, '+z', { basic: true });
+  act(tvBody, 'act.tv', () => think(tr('th.tv')));
+  let tvt = 0; onTick(dt => { tvt += dt; if (tvt > 0.07) { tvt = 0; tvStep(); tvTex.needsUpdate = true; } });
+  // вешалка с курткой у двери
+  box(-5.5, 1.6, 11.6, -5.42, 1.66, 12.6, MAT.wood, { col: false });
+  box(-5.45, 0.85, 11.75, -5.25, 1.6, 12.2, new THREE.MeshLambertMaterial({ color: 0x2f3a2c }), { col: false });
+  // лампочка под потолком
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), MAT.lampWarm); lamp.position.set(-2.9, 2.42, 12.1); scene.add(lamp);
+  box(-2.91, 2.48, 12.09, -2.89, 2.7, 12.11, MAT.dark, { col: false, ray: false });
+  const rl = new THREE.PointLight(0xffd59e, 1.25, 10); rl.position.set(-2.9, 2.3, 12.1); scene.add(rl);
+  NEAR = false;
+}
+
+// ---------------- магазин внутри ----------------
+// Пакет чипсов: коробка с вершинами, раздутыми к центру и сплющенными у швов
+const BAG_GEO = (() => {
+  const w = 0.22, h = 0.31, g = new THREE.BoxGeometry(w, h, 0.06, 6, 8, 1), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i) / (w / 2), y = p.getY(i) / (h / 2), puff = Math.max(0, 1 - y * y) * (1 - 0.35 * x * x);
+    p.setZ(i, p.getZ(i) * (0.25 + 1.6 * puff));
+  }
+  g.computeVertexNormals(); return g;
+})();
+// id вариантов; надписи на пачках и ценниках — из русского словаря: вывески мира остаются на кириллице
+const CHIPS = [['sour', '#4f9a44', '#1f4a1c'], ['crab', '#e65a2c', '#8a2010'], ['bacon', '#9a3f2c', '#4a1a12']];
+const SODA = [['tarkhun', 0x3fae4a, 89], ['buratino', 0xc98a2a, 89], ['cola', 0x3a1f14, 99]];
+function buildStoreInside() {
+  NEAR = true;
+  const y0 = 3.0, shelfM = new THREE.MeshLambertMaterial({ color: 0xd9dbd6 }), shelfD = new THREE.MeshLambertMaterial({ color: 0x5c6066 });
+  box(12.5, 5.76, -5.5, 24.5, 5.78, 5.5, MAT.ceiling, { uv: true, col: false });
+  for (const x of [15, 18.5, 22]) for (const z of [-2.6, 2.6]) box(x - 0.65, 5.72, z - 0.13, x + 0.65, 5.76, z + 0.13, MAT.tube, { col: false, ray: false });
+  const sl = new THREE.PointLight(0xf0f4ff, 1.15, 15); sl.position.set(18.5, 5.3, 0); scene.add(sl);
+  // касса
+  const counterM = new THREE.MeshLambertMaterial({ color: 0x6a6f74 });
+  const counter = box(14.2, y0, 2.4, 16.2, y0 + 0.92, 3.0, counterM);
+  box(14.2, y0 + 0.92, 2.45, 15.6, y0 + 0.94, 2.95, MAT.dark, { col: false });
+  box(15.7, y0 + 0.92, 2.5, 16.15, y0 + 1.22, 2.9, MAT.steel, { col: false });
+  box(15.16, y0 + 0.94, 2.67, 15.36, y0 + 0.946, 2.71, new THREE.MeshBasicMaterial({ color: 0xff3a3a }), { col: false, ray: false });
+  box(12.6, y0, 2.6, 14.2, y0 + 0.95, 2.8, MAT.steel); box(16.2, y0, 3.0, 16.3, y0 + 0.95, 5.0, MAT.steel);
+  const cashier = person({ shirt: 0x2f5d50, apron: 0x22443c, hair: 0x8a2a16 }); cashier.position.set(15.0, y0, 3.8); cashier.rotation.y = Math.PI; scene.add(cashier); headTrack(cashier);
+  act(counter, 'act.counter', checkout); act(cashier, 'act.cashier', checkout);
+  // охранник
+  box(13.15, y0 + 0.42, -4.95, 13.65, y0 + 0.48, -4.45, shelfD); box(13.15, y0 + 0.48, -4.95, 13.2, y0 + 1.0, -4.45, shelfD, { col: false });
+  for (const [dx, dz] of [[0, 0], [0.45, 0], [0, 0.45], [0.45, 0.45]]) box(13.17 + dx, y0, -4.93 + dz, 13.2 + dx, y0 + 0.42, -4.9 + dz, shelfD, { col: false, ray: false });
+  const guard = person({ shirt: 0x1d1f24, pants: 0x1d1f24, cap: 0x1d1f24, hair: 0x2a2a2a, sit: true });
+  guard.position.set(13.4, y0, -4.7); guard.rotation.y = Math.PI / 2; scene.add(guard); headTrack(guard);
+  addCol(13.1, y0, -5.0, 14.0, y0 + 1.5, -4.4, 'npc'); act(guard, 'act.guard', talkGuard);
+  // стеллажи-«горки» вдоль x, у южной и северной стен
+  const prods = [], R = rnd(555);
+  const gondola = (z0, z1, linesKey) => {
+    const zc = (z0 + z1) / 2;
+    box(16.8, y0, z0, 22.4, y0 + 0.12, z1, shelfD, { col: false });
+    const div = box(16.8, y0, zc - 0.03, 22.4, y0 + 1.75, zc + 0.03, shelfM, { col: false });
+    for (const h of [0.12, 0.55, 0.98, 1.41]) box(16.8, y0 + h, z0, 22.4, y0 + h + 0.025, z1, shelfM, { col: false, ray: false });
+    for (const x of [16.8, 22.4]) box(x - 0.03, y0, z0, x + 0.03, y0 + 1.75, z1, shelfD, { col: false });
+    addCol(16.77, y0, z0, 22.43, y0 + 1.75, z1, 'shelf');
+    act(div, 'act.goods', () => think(pick(linesKey)));
+    for (const side of [-1, 1]) for (const h of [0.145, 0.575, 1.005, 1.435]) {
+      for (let x = 16.85; x < 22.3;) {
+        const w = 0.08 + R() * 0.12; if (x + w > 22.35) break;
+        if (!(side < 0 && z0 > 0 && x < 18.85 && h < 1.2)) {
+          const hh = 0.12 + R() * 0.2, d = 0.16 + R() * 0.16, zz = side < 0 ? z0 + d / 2 + 0.01 : z1 - d / 2 - 0.01;
+          prods.push([x + w / 2, y0 + h + hh / 2, zz, w * 0.92, hh, d]);
+        }
+        x += w;
+      }
+    }
+  };
+  gondola(1.6, 2.4, 'shelfA');
+  gondola(-2.4, -1.6, 'shelfB');
+  // настенный стеллаж у северной стены
+  box(17.0, y0, 4.95, 23.0, y0 + 1.9, 5.45, shelfM, { col: true });
+  for (const h of [0.3, 0.75, 1.2]) for (let x = 17.05; x < 22.9;) { const w = 0.1 + R() * 0.12, hh = 0.14 + R() * 0.22; prods.push([x + w / 2, y0 + h + hh / 2, 4.85, w * 0.92, hh, 0.2]); x += w; }
+  const pal = [0xd8342c, 0x2f6fd0, 0xf2c230, 0x3a9a4a, 0xf07a1a, 0xf4f2ea, 0x8a3ab0, 0x1a1a1a, 0xe85a8a, 0x64b0d8].map(c => new THREE.Color(c));
+  const ip = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff }), prods.length);
+  const dm = new THREE.Object3D();
+  prods.forEach(([x, y, z, sx, sy, sz], i) => { dm.position.set(x, y, z); dm.scale.set(sx, sy, sz); dm.rotation.y = (R() - 0.5) * 0.08; dm.updateMatrix(); ip.setMatrixAt(i, dm.matrix); ip.setColorAt(i, pal[(R() * pal.length) | 0]); });
+  scene.add(ip);
+  // чипсы «ХРУСТ»: три вкуса, пакеты лицом к центральному проходу
+  CHIPS.forEach(([id, c1, c2], fi) => {
+    const front = new THREE.MeshLambertMaterial({ map: texChips(L10N.ru['chips.' + id], c1, c2) }), side = new THREE.MeshLambertMaterial({ color: new THREE.Color(c2) });
+    const mats = [side, side, side, side, side, front];
+    for (let k = 0; k < 7; k++) {
+      const x = 16.98 + k * 0.25, y = y0 + [0.145, 0.575, 1.005][fi] + 0.16;
+      const bag = new THREE.Mesh(BAG_GEO, mats);
+      bag.position.set(x + 0.11, y, 1.66 + (k % 2) * 0.03); bag.rotation.x = -0.12; bag.rotation.y = (R() - 0.5) * 0.12; scene.add(bag);
+      act(bag, () => S.inv.some(i => i.kind === 'chips') ? tr('act.chipsEnough') : tr('act.chips', tr('chips.' + id)), () => takeChips(id));
+    }
+    decal(texPrice('139', 'ХРУСТ 150 г'), 0.24, 0.12, 17.85, y0 + [0.145, 0.575, 1.005][fi] - 0.02, 1.585, '-z', { ray: false });
+  });
+  // холодильники у задней стены, газировка в центре
+  const fz0 = -4.8, fz1 = 4.8, fx0 = 23.7, fx1 = 24.4;
+  box(fx0, y0, fz0, fx1, y0 + 2.25, fz1, new THREE.MeshLambertMaterial({ color: 0xdedfe0 }), { col: true, ray: false });
+  box(fx0 - 0.01, y0 + 0.2, fz0 + 0.05, fx0 + 0.02, y0 + 2.1, fz1 - 0.05, new THREE.MeshBasicMaterial({ color: 0xdff2ff }), { col: false, ray: false });
+  const bottles = [];
+  for (const h of [0.25, 0.72, 1.19, 1.66]) box(fx0 - 0.3, y0 + h - 0.015, fz0, fx0, y0 + h, fz1, MAT.white, { col: false, ray: false });
+  for (let z = fz0 + 0.15; z < fz1 - 0.1; z += 0.11) for (const h of [0.25, 0.72, 1.19, 1.66]) {
+    const soda = z > -1.2 && z < 2.4, t = soda ? (z < 0 ? 0 : z < 1.2 ? 1 : 2) : -1;
+    bottles.push([fx0 - 0.12, y0 + h, z, soda ? SODA[t][1] : [0xf4f4f0, 0x2f6fd0, 0xf2c230, 0xf07a1a][(R() * 4) | 0], soda ? 0.36 : 0.26]);
+  }
+  const ib = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.04, 0.042, 1, 10), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x111111 }), bottles.length);
+  bottles.forEach(([x, y, z, c, h], i) => { dm.position.set(x, y + h / 2, z); dm.scale.set(1, h, 1); dm.rotation.set(0, 0, 0); dm.updateMatrix(); ib.setMatrixAt(i, dm.matrix); ib.setColorAt(i, new THREE.Color(c)); });
+  scene.add(ib);
+  for (let z = fz0; z < fz1 - 0.01; z += 1.2) {
+    const g = box(fx0 - 0.32, y0 + 0.12, z + 0.02, fx0 - 0.3, y0 + 2.15, z + 1.18, MAT.glass, { col: false });
+    box(fx0 - 0.34, y0 + 0.12, z, fx0 - 0.28, y0 + 2.15, z + 0.04, MAT.steel, { col: false, ray: false });
+    if (z > -2 && z < 1.5) act(g, () => tr(S.inv.some(i => i.kind === 'soda') ? 'act.sodaHave' : 'act.soda'), chooseSoda);
+    else act(g, 'act.fridgeOther', () => think(pick('fridgeLines')));
+  }
+  addCol(fx0 - 0.35, y0, fz0, fx0, y0 + 2.2, fz1, 'shelf');
+  SODA.forEach(([id, , p], i) => decal(texPrice(String(p), L10N.ru['soda.' + id].split(' ')[0] + ' 1 л'), 0.22, 0.11, fx0 - 0.36, y0 + 2.22, -0.6 + i * 1.2, '-x', { ray: false }));
+  // овощи у южной стены и бабушка
+  box(16.0, y0, -5.45, 22.5, y0 + 0.75, -4.7, new THREE.MeshLambertMaterial({ color: 0x7a5a3a }));
+  const veg = [], vc = [0xe8862a, 0xb8322a, 0xc9a65a, 0x7ab03a, 0xf2d24a];
+  for (let x = 16.15; x < 22.4; x += 0.13) for (let z = -5.35; z < -4.8; z += 0.13) veg.push([x + (R() - 0.5) * 0.04, y0 + 0.8 + R() * 0.04, z, vc[Math.floor((x - 16) / 1.3) % 5]]);
+  const iv = new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }), veg.length);
+  veg.forEach(([x, y, z, c], i) => { dm.position.set(x, y, z); dm.scale.set(1, 1, 1); dm.updateMatrix(); iv.setMatrixAt(i, dm.matrix); iv.setColorAt(i, new THREE.Color(c)); });
+  scene.add(iv);
+  const baba = person({ shirt: 0x4a3a52, pants: 0x3a3634, scarf: 0x9a2a2a, skin: 0xd8b49c }); baba.position.set(19.6, y0, -4.15); baba.rotation.y = Math.PI; scene.add(baba); headTrack(baba, 0.9);
+  addCol(19.3, y0, -4.45, 19.9, y0 + 1.6, -3.85, 'npc'); act(baba, 'act.baba', talkBaba);
+  // акционный поддон с водой и корзинки у входа
+  const pallet = box(13.3, y0, -2.3, 14.4, y0 + 0.8, -1.3, new THREE.MeshLambertMaterial({ color: 0x5aa0d8 }));
+  act(pallet, 'act.water', () => think(tr('th.water')));
+  box(13.0, y0, 1.3, 13.45, y0 + 0.5, 1.75, new THREE.MeshLambertMaterial({ color: 0xc8302a }));
+  NEAR = false;
+}
+// ================= Звук: всё синтезируется WebAudio, ни одного файла =================
+const AU = { ctx: null, muted: false };
+
+function initAudio() {
+  if (AU.ctx) { if (AU.ctx.state === 'suspended') AU.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const ctx = new AC(); AU.ctx = ctx;
+  const master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination); AU.master = master;
+  const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  AU.noise = buf;
+  const loop = (rate = 1) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate; s.start(); return s; };
+  // ветер: шум → полоса → НЧ-фильтр (в помещении глушит) → громкость
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = 0.8;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5000;
+  const wg = ctx.createGain(); wg.gain.value = 0;
+  loop().connect(bp); bp.connect(lp); lp.connect(wg); wg.connect(master);
+  AU.wind = { bp, lp, g: wg };
+  // низкий гул пропасти
+  const lp2 = ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 140;
+  const rg = ctx.createGain(); rg.gain.value = 0; loop(0.5).connect(lp2); lp2.connect(rg); rg.connect(master); AU.rumble = rg;
+  // неон над магазином жужжит
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 100;
+  const nl = ctx.createBiquadFilter(); nl.type = 'lowpass'; nl.frequency.value = 480;
+  const ng = ctx.createGain(); ng.gain.value = 0; o.connect(nl); nl.connect(ng); ng.connect(master); o.start(); AU.neon = ng;
+  // гудение холодильников
+  const h = ctx.createOscillator(); h.type = 'sine'; h.frequency.value = 55;
+  const hg = ctx.createGain(); hg.gain.value = 0; h.connect(hg); hg.connect(master); h.start(); AU.hum = hg;
+  // музыка в магазине
+  AU.music = ctx.createGain(); AU.music.gain.value = 0; AU.music.connect(master);
+  AU.nextNote = ctx.currentTime + 0.1; AU.step = 0;
+}
+
+function toggleMute() { if (!AU.ctx) return; AU.muted = !AU.muted; AU.master.gain.setTargetAtTime(AU.muted ? 0 : 0.9, AU.ctx.currentTime, 0.05); think(tr(AU.muted ? 'mute.on' : 'mute.off'), 1.6); }
+
+function burst({ dur = 0.08, f = 1000, q = 1, type = 'bandpass', vol = 0.3, t = 0, out } = {}) {
+  const ctx = AU.ctx, s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain(), t0 = ctx.currentTime + t;
+  s.buffer = AU.noise; fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  s.connect(fl); fl.connect(g); g.connect(out || AU.master);
+  s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + 0.02);
+}
+function tone(f, dur, { type = 'sine', vol = 0.2, t = 0, f2 = null, out = null } = {}) {
+  const ctx = AU.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t0 = ctx.currentTime + t;
+  o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(out || AU.master); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+
+function sfx(name, arg) {
+  if (!AU.ctx) return;
+  const v = 0.9 + Math.random() * 0.2;
+  switch (name) {
+    case 'step':
+      if (arg === 'metal') { burst({ dur: 0.05, f: 2400 * v, q: 3, vol: 0.16 }); tone(170 * v, 0.2, { type: 'triangle', vol: 0.06 }); tone(420 * v, 0.14, { vol: 0.025 }); }
+      else if (arg === 'snow') { burst({ dur: 0.12, f: 3300 * v, q: 0.7, vol: 0.11 }); burst({ dur: 0.08, f: 900, q: 1, vol: 0.08, t: 0.03 }); }
+      else if (arg === 'tile') { burst({ dur: 0.04, f: 2600 * v, q: 1.2, vol: 0.09 }); burst({ dur: 0.07, f: 500, type: 'lowpass', vol: 0.13 }); }
+      else if (arg === 'lino') burst({ dur: 0.07, f: 650 * v, type: 'lowpass', vol: 0.15 });
+      else burst({ dur: 0.07, f: 800 * v, type: 'lowpass', vol: 0.16 });
+      break;
+    case 'door': burst({ dur: 0.55, f: 650, q: 7, vol: 0.05 }); tone(210, 0.55, { type: 'sawtooth', vol: 0.02, f2: 330 }); break;
+    case 'doorMetal': tone(150, 0.8, { type: 'sawtooth', vol: 0.028, f2: 250 }); burst({ dur: 0.3, f: 1200, q: 8, vol: 0.06 }); break;
+    case 'doorClose': burst({ dur: 0.2, f: 180, type: 'lowpass', vol: 0.55 }); tone(68, 0.22, { vol: 0.25 }); break;
+    case 'chime': tone(1318, 0.9, { vol: 0.1 }); tone(1046, 1.3, { vol: 0.1, t: 0.32 }); break;
+    case 'slide': burst({ dur: 0.45, f: 300, q: 0.5, vol: 0.06 }); break;
+    case 'beep': tone(1850, 0.09, { type: 'square', vol: 0.05 }); break;
+    case 'cash': tone(2300, 0.06, { type: 'square', vol: 0.04 }); tone(2300, 0.06, { type: 'square', vol: 0.04, t: 0.11 }); break;
+    case 'rustle': for (let i = 0; i < 6; i++) burst({ dur: 0.05 + Math.random() * 0.05, f: 3000 + Math.random() * 3000, q: 1, vol: 0.06, t: i * 0.045 }); break;
+    case 'crunch': for (let i = 0; i < 7; i++) burst({ dur: 0.04 + Math.random() * 0.05, f: 1500 + Math.random() * 2500, q: 0.8, vol: 0.24, t: i * 0.055 + Math.random() * 0.02 }); break;
+    case 'pop': burst({ dur: 0.03, f: 900, q: 2, vol: 0.4 }); burst({ dur: 0.7, f: 5200, q: 0.5, vol: 0.05, t: 0.03 }); break;
+    case 'knock': for (let i = 0; i < 3; i++) { burst({ dur: 0.08, f: 260, type: 'lowpass', vol: 0.6, t: i * 0.19 }); tone(110, 0.1, { vol: 0.2, t: i * 0.19 }); } break;
+    case 'button': tone(900, 0.04, { type: 'square', vol: 0.05 }); burst({ dur: 0.03, f: 3000, vol: 0.08 }); break;
+    case 'clang': tone(330, 1.3, { type: 'triangle', vol: 0.1 }); tone(497, 0.9, { vol: 0.05 }); burst({ dur: 0.15, f: 1800, q: 4, vol: 0.15 }); break;
+    case 'locked': burst({ dur: 0.06, f: 1500, q: 3, vol: 0.2 }); burst({ dur: 0.06, f: 1300, q: 3, vol: 0.2, t: 0.12 }); break;
+    case 'fridge': tone(55, 1.4, { vol: 0.08 }); burst({ dur: 0.14, f: 400, type: 'lowpass', vol: 0.3 }); break;
+  }
+}
+
+// Магазинная музыка: дешёвое арпеджио C–Am–F–G, тихо
+const PROG = [[60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67]];
+function scheduleMusic() {
+  const ctx = AU.ctx;
+  while (AU.nextNote < ctx.currentTime + 0.3) {
+    const s = AU.step, ch = PROG[Math.floor(s / 8) % 4], n = ch[[0, 1, 2, 3, 2, 1, 2, 3][s % 8]], t = AU.nextNote - ctx.currentTime;
+    tone(440 * Math.pow(2, (n + 12 - 69) / 12) * (1 + (Math.random() - 0.5) * 0.004), 0.26, { type: 'triangle', vol: 0.05, t: Math.max(0, t), out: AU.music });
+    if (s % 4 === 0) tone(440 * Math.pow(2, (ch[0] - 12 - 69) / 12), 0.55, { vol: 0.09, t: Math.max(0, t), out: AU.music });
+    AU.nextNote += 0.3; AU.step++;
+  }
+}
+
+function updateAudio(env) {
+  if (!AU.ctx) return;
+  const now = AU.ctx.currentTime, out = env.outdoor;
+  AU.wind.g.gain.setTargetAtTime(out ? 0.22 + 0.3 * env.gust : 0.035 + 0.03 * env.gust, now, 0.4);
+  AU.wind.bp.frequency.setTargetAtTime(300 + 650 * env.gust, now, 0.5);
+  AU.wind.lp.frequency.setTargetAtTime(out ? 6000 : 420, now, 0.3);
+  AU.rumble.gain.setTargetAtTime(out ? 0.45 + 0.4 * env.gust : 0.1, now, 0.5);
+  AU.neon.gain.setTargetAtTime(clamp(1 - env.neonDist / 9, 0, 1) * 0.018, now, 0.3);
+  AU.hum.gain.setTargetAtTime(env.inStore ? 0.025 : env.atHome ? 0.012 : 0, now, 0.5);
+  AU.music.gain.setTargetAtTime(env.inStore ? 0.55 : env.nearStore ? 0.1 : 0, now, 0.6);
+  if (env.inStore || env.nearStore) scheduleMusic(); else { AU.nextNote = now + 0.1; }
+}
+// ================= Игра: состояние, управление, взаимодействие, сценарий, цикл =================
+const $ = id => document.getElementById(id);
+const UI = { hud: $('hud'), title: $('title'), pause: $('pause'), ending: $('ending'), fade: $('fade'), tasks: $('tasks'), inv: $('inv'),
+  cross: $('cross'), prompt: $('prompt'), promptText: $('prompt-text'), promptKey: $('prompt-key'), thought: $('thought'), dialog: $('dialog'),
+  clock: $('clock'), money: $('money'), touch: $('touch'), knob: $('knob') };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const touchMode = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
+
+const S = { phase: 'title', money: 500, inv: [], flags: {}, dist: 0, t0: 0, play: 0, cine: null, prev: 'play' };
+const START = { x: -3.0, z: 13.3, yaw: -Math.PI / 2 };
+const P = { x: START.x, y: 0, z: START.z, vy: 0, vx: 0, vz: 0, yaw: START.yaw, pitch: -0.04, ground: true, eyeY: 1.62, bob: 0, stepIdx: 0, surf: 'lino', safe: [START.x, 0, START.z], safeT: 0 };
+const keys = {};
+let locked = false, lockBroken = touchMode, mouseDown = false, dragMoved = 0, runToggle = false;
+
+// ---------- коллизии: AABB, шаг через низкие препятствия (ступени) ----------
+const PR = 0.28, PH = 1.75, STEP = 0.36;
+function hits(x, y, z) {
+  const y0 = y + STEP, y1 = y + PH;
+  for (let i = 0; i < colliders.length; i++) {
+    const c = colliders[i];
+    if (c.on && x + PR > c.x0 && x - PR < c.x1 && z + PR > c.z0 && z - PR < c.z1 && y1 > c.y0 && y0 < c.y1) return true;
+  }
+  return false;
+}
+function groundAt(x, y, z) {
+  let g = -1e9, s = null; const r = 0.18;
+  for (let i = 0; i < colliders.length; i++) {
+    const c = colliders[i];
+    if (c.on && c.surf !== 'rail' && x + r > c.x0 && x - r < c.x1 && z + r > c.z0 && z - r < c.z1 && c.y1 <= y + STEP + 0.01 && c.y1 > g) { g = c.y1; s = c.surf; }
+  }
+  return [g, s];
+}
+
+function updatePlayer(dt) {
+  let fwd = 0, str = 0;
+  if (S.phase === 'play') {
+    fwd = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+    str = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    if (touchMode) { fwd -= stickV[1]; str += stickV[0]; }
+  }
+  const run = keys.ShiftLeft || keys.ShiftRight || runToggle, sp = run ? 4.2 : 2.3;
+  const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+  let mx = -sy * fwd + cy * str, mz = -cy * fwd - sy * str;
+  const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+  P.vx = damp(P.vx, mx * sp, 10, dt); P.vz = damp(P.vz, mz * sp, 10, dt);
+  const ox = P.x, oz = P.z;
+  const nx = P.x + P.vx * dt; if (!hits(nx, P.y, P.z)) P.x = nx; else P.vx = 0;
+  const nz = P.z + P.vz * dt; if (!hits(P.x, P.y, nz)) P.z = nz; else P.vz = 0;
+  const [g, surf] = groundAt(P.x, P.y, P.z);
+  if (P.y <= g + 0.001) { P.y = g; P.vy = 0; P.ground = true; }
+  else if (P.ground && P.y - g < 0.4) { P.y = g; P.vy = 0; }
+  else { P.ground = false; P.vy -= 18 * dt; P.y = Math.max(g, P.y + P.vy * dt); if (P.y === g) { P.ground = true; P.vy = 0; } }
+  if (surf) P.surf = surf;
+  if (P.ground) { P.safeT += dt; if (P.safeT > 1) { P.safeT = 0; P.safe = [P.x, P.y, P.z]; } }
+  if (P.y < -30) { [P.x, P.y, P.z] = P.safe; P.vy = 0; think(tr('z.fell')); }
+  const moved = Math.hypot(P.x - ox, P.z - oz), speed = moved / Math.max(dt, 1e-4);
+  S.dist += moved;
+  if (P.ground && speed > 0.25) {
+    P.bob += moved * Math.PI / (run ? 1.25 : 0.9);
+    const idx = Math.floor(P.bob / Math.PI); if (idx !== P.stepIdx) { P.stepIdx = idx; sfx('step', P.surf); }
+  }
+  const amp = (reduceMotion ? 0.01 : 0.045) * Math.min(1, speed / 2.3);
+  P.eyeY = damp(P.eyeY, P.y + 1.62, 14, dt);
+  camera.position.set(P.x, P.eyeY - Math.abs(Math.sin(P.bob)) * amp + amp * 0.5, P.z);
+  camera.rotation.set(P.pitch, P.yaw, reduceMotion ? 0 : Math.sin(P.bob) * 0.006 * Math.min(1, speed / 2.3));
+}
+function look(dx, dy) { P.yaw -= dx * 0.0022; P.pitch = clamp(P.pitch - dy * 0.0022, -1.45, 1.45); }
+
+// ---------- ввод: клавиатура, мышь (pointer lock, иначе — перетаскивание), тач ----------
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+  if (S.phase === 'dialog') return dialogKey(e);
+  if (S.phase === 'play') {
+    if (e.code === 'KeyE' || e.code === 'Enter') interact();
+    if (e.code === 'KeyM') toggleMute();
+    if (e.code === 'Escape' && !locked) pause();
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+const cvs = renderer.domElement;
+// Захват мыши. Если браузер/рамка его не дали — работает обзор перетаскиванием, а клик по сцене пробует снова.
+function lockPointer() {
+  if (lockBroken || !cvs.requestPointerLock) return;
+  try { const p = cvs.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) { lockBroken = true; }
+}
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === cvs;
+  if (!locked && (S.phase === 'play' || S.phase === 'dialog')) pause();
+});
+document.addEventListener('mousemove', e => {
+  if (S.phase !== 'play' && S.phase !== 'dialog') return;
+  if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return; // браузерный глюк первого события после захвата
+  if (locked) look(e.movementX, e.movementY);
+  else if (mouseDown && !touchMode) { look(e.movementX * 1.4, e.movementY * 1.4); dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY); }
+});
+cvs.addEventListener('mousedown', e => {
+  if (touchMode) return;
+  mouseDown = true; dragMoved = 0;
+  if (locked) { if (S.phase === 'play') interact(); else if (S.phase === 'dialog') advance(); }
+  else if (S.phase === 'play' || S.phase === 'dialog') lockPointer();
+});
+addEventListener('mouseup', () => {
+  if (mouseDown && !locked && !touchMode && dragMoved < 6) { if (S.phase === 'play') interact(); else if (S.phase === 'dialog') advance(); }
+  mouseDown = false;
+});
+let stickId = null, stickO = [0, 0], stickV = [0, 0], lookId = null, lookL = [0, 0], lookS = [0, 0, 0];
+cvs.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) {
+    if (t.clientX < innerWidth * 0.45 && stickId === null) { stickId = t.identifier; stickO = [t.clientX, t.clientY]; }
+    else if (lookId === null) { lookId = t.identifier; lookL = [t.clientX, t.clientY]; lookS = [t.clientX, t.clientY, performance.now()]; }
+  }
+  e.preventDefault();
+}, { passive: false });
+cvs.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) {
+      const dx = t.clientX - stickO[0], dy = t.clientY - stickO[1], m = Math.hypot(dx, dy) || 1, k = Math.min(1, m / 50) / m;
+      stickV = [dx * k, dy * k]; UI.knob.style.transform = `translate(${stickV[0] * 36}px, ${stickV[1] * 36}px)`;
+    } else if (t.identifier === lookId) { look((t.clientX - lookL[0]) * 1.8, (t.clientY - lookL[1]) * 1.8); lookL = [t.clientX, t.clientY]; }
+  }
+  e.preventDefault();
+}, { passive: false });
+cvs.addEventListener('touchend', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) { stickId = null; stickV = [0, 0]; UI.knob.style.transform = ''; }
+    if (t.identifier === lookId) {
+      lookId = null;
+      if (Math.hypot(t.clientX - lookS[0], t.clientY - lookS[1]) < 12 && performance.now() - lookS[2] < 350) { if (S.phase === 'dialog') advance(); else interact(); }
+    }
+  }
+});
+$('t-act').addEventListener('click', () => { if (S.phase === 'dialog') advance(); else interact(); });
+$('t-run').addEventListener('click', e => { runToggle = !runToggle; e.currentTarget.classList.toggle('on', runToggle); });
+
+// ---------- взаимодействие: луч из центра экрана ----------
+const ray = new THREE.Raycaster(); ray.far = 2.6;
+const CENTER = new THREE.Vector2(0, 0);
+let focus = null;
+function updateFocus() {
+  focus = null;
+  if (S.phase === 'play' && !S.cine) {
+    ray.setFromCamera(CENTER, camera);
+    const hit = ray.intersectObjects(rayMeshes, true)[0];
+    let o = hit && hit.object;
+    while (o && !(o.userData && o.userData.act)) o = o.parent;
+    if (o) { const a = o.userData.act, lbl = typeof a.label === 'function' ? a.label() : tr(a.label); if (lbl) focus = { a, lbl }; }
+  }
+  UI.prompt.hidden = !focus; UI.cross.classList.toggle('on', !!focus);
+  if (focus) { UI.promptText.textContent = focus.lbl; UI.promptKey.textContent = touchMode ? tr('prompt.tap') : 'E'; }
+}
+function interact() { if (focus && S.phase === 'play') focus.a.fn(); }
+
+// ---------- мысли (субтитры) и диалоги ----------
+let thoughtT = 0; const thoughtQ = [];
+function think(text, dur, raw) {
+  if (thoughtQ.length > 2) thoughtQ.splice(0, thoughtQ.length - 2);
+  thoughtQ.push([raw ? text : tr('fmt.thought', text), dur || Math.min(7.5, 2.4 + text.length * 0.055)]);
+  if (thoughtT <= 0) nextThought();
+}
+function say(who, text) { think(tr('fmt.say', who, text), null, true); }
+function nextThought() {
+  const it = thoughtQ.shift();
+  if (!it) { UI.thought.classList.remove('show'); thoughtT = 0; return; }
+  UI.thought.textContent = it[0]; UI.thought.classList.add('show'); thoughtT = it[1];
+}
+let DLG = null;
+const dq = s => UI.dialog.querySelector(s);
+function dialog(lines, onEnd) { DLG = { lines: lines.slice(), i: 0, onEnd }; S.phase = 'dialog'; UI.hud.classList.add('talking'); showLine(); }
+function showLine() {
+  const L = DLG.lines[DLG.i];
+  if (L.fx) L.fx();
+  UI.dialog.hidden = false;
+  dq('.who').textContent = L.who || '';
+  dq('.text').textContent = typeof L.text === 'function' ? L.text() : L.text;
+  const box = dq('.opts'); box.textContent = '';
+  (L.opts || []).forEach(([label], k) => {
+    const b = document.createElement('button'); b.type = 'button';
+    const n = document.createElement('b'); n.textContent = k + 1; b.append(n, label);
+    b.addEventListener('click', ev => { ev.stopPropagation(); choose(k); }); box.append(b);
+  });
+  dq('.cont').textContent = L.opts ? (touchMode || !locked ? tr('dlg.choose') : tr('dlg.press', L.opts.length)) : tr(touchMode ? 'dlg.tap' : 'dlg.next');
+}
+function choose(k) {
+  const L = DLG && DLG.lines[DLG.i], o = L && L.opts && L.opts[k]; if (!o) return;
+  const more = o[1] ? o[1]() : null;
+  if (Array.isArray(more)) DLG.lines.splice(DLG.i + 1, 0, ...more);
+  advance(true);
+}
+function advance(force) {
+  if (!DLG) return;
+  const L = DLG.lines[DLG.i]; if (L && L.opts && !force) return;
+  DLG.i++;
+  if (DLG.i >= DLG.lines.length) { UI.dialog.hidden = true; UI.hud.classList.remove('talking'); const cb = DLG.onEnd; DLG = null; if (S.phase === 'dialog') S.phase = 'play'; if (cb) cb(); }
+  else showLine();
+}
+function dialogKey(e) {
+  const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+  if (m) choose(+m[2] - 1);
+  else if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') advance();
+}
+
+// ---------- магазин: покупки, касса, NPC ----------
+// Предметы хранят id варианта (v), а не готовое название: при смене языка переводится и купленное.
+const has = k => S.inv.some(i => i.kind === k), paidK = k => S.inv.some(i => i.kind === k && i.paid);
+function takeChips(id) {
+  if (has('chips')) return think(tr('th.chipsEnough'));
+  S.inv.push({ kind: 'chips', v: id, price: 139, paid: false }); sfx('rustle'); updateHUD();
+  think(tr('th.chips.' + id));
+}
+function chooseSoda() {
+  if (has('soda')) return think(tr('th.sodaHave'));
+  sfx('fridge');
+  dialog([{ who: tr('fridge.who'), text: tr('fridge.ask'), opts: SODA.map(([id, , p]) => [`${tr('sodaOpt.' + id)} — ${p} ₽`, () => {
+    S.inv.push({ kind: 'soda', v: id, price: p, paid: false }); updateHUD();
+    think(tr('th.soda.' + id));
+  }]) }]);
+}
+function checkout() {
+  const un = S.inv.filter(i => !i.paid), C = tr('cash.who');
+  if (!un.length) return dialog(S.flags.paid ? [{ who: C, text: tr('cash.more'), opts: [[tr('cash.moreNo'), null]] }]
+    : [{ who: C, text: tr('cash.nothing') }, { who: tr('you.who'), text: tr('you.hint') }]);
+  const sum = () => un.reduce((s, i) => s + i.price, 0) + (S.flags.bag ? 9 : 0);
+  const paidLine = text => [{ fx: () => sfx('cash'), who: tr('term.who'), text }];
+  dialog([
+    { who: C, text: tr('cash.bag'), opts: [[tr('cash.bagYes'), () => { S.flags.bag = true; }], [tr('cash.bagNo'), () => { S.flags.bag = false; }]] },
+    { who: C, text: tr('cash.card'), opts: [[tr('cash.cardNo'), null], [tr('cash.cardHome'), () => [{ who: C, text: tr('cash.cardHomeA') }]]] },
+    { fx: () => un.forEach((_, k) => setTimeout(() => sfx('beep'), 150 + k * 380)), who: C,
+      text: () => tr('cash.total', un.map(itemName).concat(S.flags.bag ? [tr('cash.bagItem')] : []).join(tr('list.sep')), sum()),
+      opts: [[tr('cash.payCard'), () => paidLine(tr('term.ok'))],
+             [tr('cash.payCash'), () => [{ who: C, text: tr('cash.smaller'), opts: [[tr('cash.only500'), () => [{ fx: () => sfx('cash'), who: C, text: tr('cash.change') }]]] }]]] },
+    { who: C, text: tr('cash.bye') },
+  ], () => {
+    S.money -= sum(); un.forEach(i => { i.paid = true; });
+    S.flags.paid = paidK('chips') && paidK('soda'); updateHUD();
+    if (!S.flags.paid) think(tr(has('chips') ? 'th.needSoda' : 'th.needChips'));
+  });
+}
+let guardI = 0;
+function talkGuard() {
+  if (S.inv.some(i => !i.paid)) return say(tr('guard.who'), tr('guard.watch'));
+  const L = tr('guard.lines'); say(tr('guard.who'), L[guardI++ % L.length]);
+}
+function talkBaba() {
+  const B = tr('baba.who');
+  if (S.flags.baba) return say(B, tr('baba.again'));
+  S.flags.baba = true;
+  dialog([{ who: B, text: tr('baba.q'), opts: [
+    [tr('baba.o1'), () => [{ who: B, text: tr('baba.a1') }]],
+    [tr('baba.o2'), () => [{ who: B, text: tr('baba.a2') }]]] }]);
+}
+let nagT = 0;
+function storeDoorAllowed(fromOutside) {
+  if (fromOutside || !S.inv.some(i => !i.paid)) return true;
+  if (performance.now() > nagT) { nagT = performance.now() + 6000; say(tr('guard.who'), tr('guard.stop')); }
+  return false;
+}
+
+// ---------- задачи и HUD ----------
+function tasks() {
+  const f = S.flags, L = [];
+  if (!f.intro) return L;
+  L.push([tr('task.store'), !!f.store]);
+  if (f.store) L.push([tr('task.chips'), has('chips')], [tr('task.soda'), has('soda')], [tr('task.pay'), !!f.paid]);
+  if (f.paid) L.push([tr('task.home'), !!f.home]);
+  if (f.home) L.push([tr('task.sofa'), !!f.ended]);
+  return L;
+}
+let tasksSig = '';
+function updateHUD() {
+  const L = tasks(), sig = JSON.stringify(L);
+  if (sig !== tasksSig) { tasksSig = sig; UI.tasks.textContent = ''; for (const [t, d] of L) { const li = document.createElement('li'); li.textContent = t; if (d) li.className = 'done'; UI.tasks.append(li); } }
+  UI.money.textContent = S.money + ' ₽';
+  UI.inv.textContent = '';
+  if (S.inv.length) {
+    const h = document.createElement('div'); h.className = 'lbl'; h.textContent = tr(S.flags.bag ? 'inv.bag' : 'inv.hands'); UI.inv.append(h);
+    for (const i of S.inv) { const d = document.createElement('div'); d.className = i.paid ? 'paid' : 'unpaid'; d.textContent = itemName(i) + (i.paid ? '' : tr('inv.unpaid')); UI.inv.append(d); }
+  }
+}
+// ================= Сценарий, экраны, главный цикл =================
+function setupZones() {
+  const f = S.flags, say1 = k => () => think(tr(k));
+  zone(-5.5, -1, 9.6, -4.2, 3, 12, say1('z.jacket'));
+  zone(-8.2, -1, -4, -5.7, 3, 22, () => { f.corr = true; think(tr('z.corr')); });
+  zone(-8.2, -1, 16.5, -5.7, 3, 22, say1('z.lift'));
+  zone(-5.5, -1, -1.25, -0.4, 3, 1.25, () => { f.pass = true; think(tr('z.pass')); });
+  zone(0.05, -1, -3, 2.4, 3, 3, () => { f.outside = true; think(tr('z.out')); });
+  zone(4.8, 0.8, -0.6, 6.3, 3.5, 0.6, say1('z.stairs'));
+  zone(8.7, 2.4, -7, 12.2, 6, 7, say1('z.deck'));
+  zone(12.7, 2.4, -5.5, 24.5, 6, 5.5, () => { f.store = true; updateHUD(); think(tr('z.store')); });
+  zone(8.7, 2.4, -7, 12.2, 6, 7, () => { if (!f.paid) return false; think(tr(f.bag ? 'z.leaveBag' : 'z.leaveHands')); return true; }, false);
+  zone(-8.2, -1, -4, -0.3, 3, 22, () => { if (!f.paid) return false; think(tr('z.almost')); return true; }, false);
+  zone(-5.5, -1, 9.2, -0.25, 3, 15, () => { if (!f.paid) return false; f.home = true; updateHUD(); think(tr('z.home')); return true; }, false);
+}
+function checkZones() {
+  const x = P.x, y = P.y + 0.9, z = P.z;
+  for (const zn of zones) {
+    if (zn.done) continue;
+    const inz = x > zn.x0 && x < zn.x1 && y > zn.y0 && y < zn.y1 && z > zn.z0 && z < zn.z1;
+    if (inz && !zn.inside) { const r = zn.fn(); if (zn.once || r === true) zn.done = true; }
+    zn.inside = inz;
+  }
+}
+// подсказки, если игрок застрял
+const HINTS = [[30, () => !S.flags.corr, 'hint.door'],
+               [70, () => S.flags.corr && !S.flags.pass, 'hint.pass'],
+               [110, () => S.flags.pass && !S.flags.outside, 'hint.ext']];
+
+let fadeTimer = 0;
+function fadeTo(v, instant) {
+  clearTimeout(fadeTimer); UI.fade.hidden = false;
+  if (instant) { UI.fade.style.transition = 'none'; UI.fade.style.opacity = v; void UI.fade.offsetWidth; UI.fade.style.transition = ''; }
+  else { void UI.fade.offsetWidth; UI.fade.style.opacity = v; }
+  if (v === 0) fadeTimer = setTimeout(() => { UI.fade.hidden = true; }, instant ? 0 : 1500);
+}
+function startGame() {
+  initAudio();
+  UI.title.hidden = true; UI.hud.hidden = false; UI.touch.hidden = !touchMode;
+  fadeTo(1, true);
+  Object.assign(P, { x: START.x, y: 0, z: START.z, yaw: START.yaw, pitch: -0.04, eyeY: 1.62, vx: 0, vz: 0 });
+  S.phase = 'play'; S.t0 = performance.now();
+  updatePlayer(0.016);
+  setTimeout(() => fadeTo(0), 80);
+  lockPointer();
+  think(tr('intro.1'));
+  think(tr('intro.2'));
+  think(tr('intro.3'));
+  setTimeout(() => { S.flags.intro = true; updateHUD(); }, 7500);
+  updateHUD();
+}
+function pause() {
+  if (S.phase !== 'play' && S.phase !== 'dialog') return;
+  S.prev = S.phase; S.phase = 'paused'; UI.pause.hidden = false; UI.hud.classList.add('paused');
+  for (const k in keys) keys[k] = false;
+}
+function resume() { UI.pause.hidden = true; UI.hud.classList.remove('paused'); S.phase = S.prev || 'play'; initAudio(); lockPointer(); }
+$('start').addEventListener('click', startGame);
+$('resume').addEventListener('click', resume);
+$('again').addEventListener('click', () => location.reload());
+
+function startEnding() {
+  S.flags.ended = true; updateHUD(); S.phase = 'ending'; UI.hud.classList.add('cine');
+  if (document.pointerLockElement) document.exitPointerLock();
+  const fr = { x: P.x, y: P.eyeY, z: P.z, yaw: P.yaw, pitch: P.pitch };
+  const to = { x: -3.55, y: 1.06, z: 14.3, yaw: -1.3, pitch: 0.03 };
+  to.yaw = fr.yaw + Math.atan2(Math.sin(to.yaw - fr.yaw), Math.cos(to.yaw - fr.yaw));
+  S.cine = { t: 0, dur: 2.4, fr, to, done: () => {
+    sfx('rustle'); setTimeout(() => sfx('pop'), 1000); setTimeout(() => sfx('crunch'), 2000); setTimeout(() => sfx('crunch'), 2700);
+    setTimeout(showEnding, 4200);
+  } };
+}
+function cineStep(dt) {
+  const c = S.cine; c.t = Math.min(c.dur, c.t + dt);
+  const k = c.t / c.dur, e = k * k * (3 - 2 * k), L = (a, b) => a + (b - a) * e;
+  camera.position.set(L(c.fr.x, c.to.x), L(c.fr.y, c.to.y), L(c.fr.z, c.to.z));
+  camera.rotation.set(L(c.fr.pitch, c.to.pitch), L(c.fr.yaw, c.to.yaw), 0);
+  if (c.t >= c.dur && c.done) { const d = c.done; c.done = null; d(); }
+}
+function showEnding() {
+  S.endSec = Math.round((performance.now() - S.t0) / 1000);
+  renderEnding();
+  UI.hud.hidden = true; UI.ending.hidden = false;
+}
+function renderEnding() {
+  if (S.endSec == null) return;
+  const mm = Math.floor(S.endSec / 60), ss = String(S.endSec % 60).padStart(2, '0');
+  const rows = [[tr('end.time'), tr('fmt.time', mm, ss)], [tr('end.dist'), tr('fmt.dist', Math.round(S.dist))], [tr('end.spent'), `${500 - S.money} ₽`],
+                [tr('end.loot'), S.inv.map(itemName).join(tr('list.sep'))], [tr('end.floor'), tr('end.floorVal')]];
+  const dl = $('end-stats'); dl.textContent = '';
+  for (const [a, b] of rows) { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = a; dd.textContent = b; dl.append(dt, dd); }
+  $('end-text').textContent = tr(S.flags.lookedDown ? 'end.textDown' : 'end.text');
+}
+// смена языка: всё, что собирается из строк в рантайме
+function langChanged() { tasksSig = ''; updateHUD(); renderEnding(); }
+
+// Титульный план: вид снизу на мост с магазином, как с той фотографии
+function titleCam(t) {
+  camera.position.set(1.6 + Math.sin(t * 0.06) * 0.4, 0.3 + Math.sin(t * 0.09) * 0.15, -12.5);
+  camera.lookAt(17.5 + Math.sin(t * 0.045) * 0.6, 5.0, -3.5);
+}
+
+// ---------- снимок состояния для горячего обновления артефакта ----------
+function snapshot() {
+  return { P: { x: P.x, y: P.y, z: P.z, yaw: P.yaw, pitch: P.pitch }, S: { money: S.money, inv: S.inv, flags: S.flags, dist: S.dist },
+           phase: S.phase, doors: { apt: aptDoor && aptDoor.open, ext: extDoor && extDoor.open } };
+}
+function restore(d) {
+  if (!d || !d.S || (d.phase !== 'play' && d.phase !== 'dialog' && d.phase !== 'paused')) return;
+  Object.assign(P, d.P, { eyeY: d.P.y + 1.62 }); Object.assign(S, d.S);
+  if (d.doors) { aptDoor.set(!!d.doors.apt, true); extDoor.set(!!d.doors.ext, true); }
+  for (const zn of zones) if (zn.once && zn.x0 <= P.x && P.x <= zn.x1 && zn.z0 <= P.z && P.z <= zn.z1) zn.inside = true;
+  UI.title.hidden = true; UI.hud.hidden = false; UI.touch.hidden = !touchMode;
+  S.t0 = performance.now(); S.phase = 'paused'; S.prev = 'play'; UI.pause.hidden = false; UI.hud.classList.add('paused'); updateHUD(); updatePlayer(0.016);
+}
+
+// ---------- главный цикл ----------
+let last = 0, T = 0, envK = 0, clockAcc = 0;
+const PR_MAX = Math.min(window.devicePixelRatio || 1, 1.5); let prNow = PR_MAX, perfT = 0, perfN = 0;
+function adaptResolution(raw) {
+  if (window.__f5kFixedPR) return; // для автотестов
+  perfT += raw; perfN++;
+  if (perfT < 2.5) return;
+  const fps = perfN / perfT; perfT = 0; perfN = 0;
+  const next = fps < 30 ? Math.max(0.5, prNow - 0.25) : fps > 56 ? Math.min(PR_MAX, prNow + 0.25) : prNow;
+  if (next !== prNow) { prNow = next; renderer.setPixelRatio(prNow); renderer.setSize(innerWidth, innerHeight); }
+}
+const SIGN = new THREE.Vector3(11.8, 6.1, -1.35);
+function frame(now) {
+  requestAnimationFrame(frame);
+  const raw = (now - last) / 1000 || 0.016, dt = Math.min(0.05, raw); last = now; T += dt;
+  if (!document.hidden) adaptResolution(Math.min(raw, 1));
+  const gust = clamp(0.5 + 0.28 * Math.sin(T * 0.23) + 0.2 * Math.sin(T * 0.71 + 1.3) + 0.12 * Math.sin(T * 1.9 + 0.4), 0, 1);
+  if (S.phase === 'title') titleCam(T);
+  else if (S.cine) cineStep(dt);
+  else if (S.phase === 'play' || S.phase === 'dialog') updatePlayer(dt);
+  for (const f of tickers) f(dt, T);
+  const inside = insideAny(camera.position.x, camera.position.y, camera.position.z);
+  envK = damp(envK, inside ? 1 : 0, 2.5, dt);
+  scene.fog.density = 0.022 - 0.013 * envK;
+  hemi.intensity = 0.85 - 0.42 * envK;
+  updateSnow(dt, T, 1.0 + 2.4 * gust);
+  if (S.phase === 'play') {
+    checkZones();
+    S.play += dt;
+    if (!inside && P.pitch < -0.85 && !S.flags.lookedDown && S.flags.outside) { S.flags.lookedDown = true; think(tr('z.lookDown')); }
+    for (const h of HINTS) if (!h[3] && S.play > h[0] && h[1]()) { h[3] = true; think(tr(h[2])); }
+  }
+  if (thoughtT > 0) { thoughtT -= dt; if (thoughtT <= 0) nextThought(); }
+  clockAcc += dt;
+  if (clockAcc > 0.5) { clockAcc = 0; const m = 18 * 60 + 40 + Math.floor(S.play / 8); UI.clock.textContent = `${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, '0')}`; }
+  updateFocus();
+  updateAudio({ outdoor: !inside, gust, neonDist: camera.position.distanceTo(SIGN), inStore: inside && inside.kind === 'store',
+    nearStore: !inside && camera.position.x > 8 && camera.position.y > 3, atHome: inside && inside.kind === 'home' });
+  renderer.render(scene, camera);
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+async function boot(data) {
+  setLang(detectLang());
+  try {
+    if (document.readyState !== 'complete') await new Promise(r => { addEventListener('load', r, { once: true }); setTimeout(r, 2500); });
+    await Promise.race([Promise.all(['64px "PT Mono"', '700 64px "PT Serif"', 'italic 700 64px "PT Serif"', 'italic 64px "PT Serif"', '64px "Rubik Mono One"']
+      .map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, 2500))]);
+  } catch (e) { /* шрифты не критичны: в canvas будет запасной */ }
+  initMaterials();
+  buildTowers(); buildGallery(); buildDeck(); buildStoreShell(); buildDistant(); buildHome(); buildStoreInside(); buildSnow();
+  box(-0.25, -0.1, -0.45, 0, 0.02, 0.45, MAT.steel, { surf: 'metal' });
+  setupZones();
+  $('fx-grain').style.backgroundImage = `url(${grainDataURL()})`;
+  restore(data);
+  requestAnimationFrame(t => { last = t; frame(t); });
+  setTimeout(() => fadeTo(0), 60);
+  window.__f5k = { S, P, camera, scene, renderer, snow: () => snow, zones, colliders, start: startGame, interact, focus: () => focus && focus.lbl,
+    tp(x, y, z, yaw = P.yaw, pitch = 0) { Object.assign(P, { x, y, z, yaw, pitch, eyeY: y + 1.62, vy: 0 }); },
+    say: () => UI.thought.textContent, choose, advance, doors: () => ({ aptDoor, extDoor }), storeDoor: () => storeDoor,
+    audio: { initAudio, sfx, updateAudio, scheduleMusic, AU },
+    sim(code, n, dt = 0.05) { keys[code] = true; for (let i = 0; i < n; i++) updatePlayer(dt); keys[code] = false; return { x: +P.x.toFixed(2), y: +P.y.toFixed(2), z: +P.z.toFixed(2), surf: P.surf }; } };
+}
+const HOT = window.claude && window.claude.hot;
+if (HOT && HOT.snapshot) HOT.snapshot(snapshot);
+if (HOT && HOT.ready) HOT.ready(boot); else boot((HOT && HOT.data) || {});
+})();
+</script></body></html>
