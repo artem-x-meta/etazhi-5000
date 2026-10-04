@@ -53,7 +53,7 @@ body { font-family: var(--font-body); -webkit-user-select: none; user-select: no
 kbd { font-family: var(--font-mono); font-size: 12px; padding: 1px 7px; border: 1px solid var(--fg); border-bottom-width: 3px; border-radius: 3px; background: rgba(0,0,0,.45); color: var(--fg); }
 #thought { position: absolute; left: 50%; bottom: calc(14vh + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100vw - 32px));
   text-align: center; font-style: italic; font-size: clamp(17px, 2.3vw, 22px); line-height: 1.4; text-wrap: balance; text-shadow: 0 1px 4px #000, 0 0 18px rgba(0,0,0,.8);
-  opacity: 0; transition: opacity .6s ease; }
+  opacity: 0; transition: opacity .25s ease; }
 #thought.show { opacity: 1; }
 #hud.cine > :not(#thought) { opacity: 0; transition: opacity 1.2s ease; }
 #hud.talking #touch, #hud.talking #thought, #hud.talking #prompt { visibility: hidden; }
@@ -1416,7 +1416,7 @@ function buildHome() {
   // лифт и объявление
   box(-7.6, 0, 21.9, -6.3, 2.3, 22.0, MAT.steel, { col: false });
   const lift = decal(texLift(), 1.1, 2.1, -6.95, 1.05, 21.89, '-z');
-  act(lift, 'act.lift', () => { sfx('button'); setTimeout(() => think(tr('th.lift')), 600); });
+  act(lift, 'act.lift', () => { sfx('button'); setTimeout(() => think(tr('th.lift')), 350); });
   const btn = box(-7.86, 1.2, 21.92, -7.74, 1.36, 22.0, new THREE.MeshBasicMaterial({ color: 0x8a1a10 }), { col: false });
   act(btn, 'act.button', () => { sfx('button'); think(tr('th.button')); });
   const notice = decal(texNotice(), 0.8, 1.0, -8.19, 1.55, 19.6, '+x');
@@ -1857,17 +1857,31 @@ function updateFocus() {
 function interact() { if (focus && S.phase === 'play') focus.a.fn(); }
 
 // ---------- мысли (субтитры) и диалоги ----------
-let thoughtT = 0; const thoughtQ = [];
+// Два вида мыслей. think() — реакция на действие игрока: показывается сразу, перебивая текущую.
+// muse() — фоновая (интро, зоны, подсказки): ждёт в очереди и устаревает через ttl секунд ожидания.
+// Перебитая фоновая мысль, которую не успели прочитать (< 1.5 с на экране), возвращается в начало очереди.
+let thoughtT = 0, thoughtCur = null; const thoughtQ = [];
+function thoughtItem(text, dur, raw) {
+  const s = raw ? text : tr('fmt.thought', text);
+  const cjk = (s.match(/[\u3000-\u9fff\uff00-\uffef]/g) || []).length; // иероглифы читаются медленнее букв
+  return { s, dur: dur || Math.min(8, 2.2 + (s.length - cjk) * 0.05 + cjk * 0.14), at: performance.now() };
+}
+function showThought(it) { thoughtCur = it; UI.thought.textContent = it.s; UI.thought.classList.add('show'); thoughtT = it.dur; }
 function think(text, dur, raw) {
-  if (thoughtQ.length > 2) thoughtQ.splice(0, thoughtQ.length - 2);
-  thoughtQ.push([raw ? text : tr('fmt.thought', text), dur || Math.min(7.5, 2.4 + text.length * 0.055)]);
-  if (thoughtT <= 0) nextThought();
+  if (thoughtCur && thoughtCur.ambient && thoughtCur.dur - thoughtT < 1.5) { thoughtCur.at = performance.now(); thoughtQ.unshift(thoughtCur); }
+  showThought(thoughtItem(text, dur, raw));
+}
+function muse(text, ttl = 6) {
+  const it = thoughtItem(text); it.ambient = true; it.ttl = ttl;
+  if (thoughtT <= 0) showThought(it);
+  else { thoughtQ.push(it); if (thoughtQ.length > 4) thoughtQ.shift(); }
 }
 function say(who, text) { think(tr('fmt.say', who, text), null, true); }
 function nextThought() {
-  const it = thoughtQ.shift();
-  if (!it) { UI.thought.classList.remove('show'); thoughtT = 0; return; }
-  UI.thought.textContent = it[0]; UI.thought.classList.add('show'); thoughtT = it[1];
+  let it; const now = performance.now();
+  while ((it = thoughtQ.shift()) && it.ambient && now - it.at > it.ttl * 1000) { /* устарела — пропускаем */ }
+  if (!it) { UI.thought.classList.remove('show'); thoughtT = 0; thoughtCur = null; return; }
+  showThought(it);
 }
 let DLG = null;
 const dq = s => UI.dialog.querySelector(s);
@@ -1984,18 +1998,18 @@ function updateHUD() {
 }
 // ================= Сценарий, экраны, главный цикл =================
 function setupZones() {
-  const f = S.flags, say1 = k => () => think(tr(k));
+  const f = S.flags, say1 = k => () => muse(tr(k));
   zone(-5.5, -1, 9.6, -4.2, 3, 12, say1('z.jacket'));
-  zone(-8.2, -1, -4, -5.7, 3, 22, () => { f.corr = true; think(tr('z.corr')); });
+  zone(-8.2, -1, -4, -5.7, 3, 22, () => { f.corr = true; muse(tr('z.corr')); });
   zone(-8.2, -1, 16.5, -5.7, 3, 22, say1('z.lift'));
-  zone(-5.5, -1, -1.25, -0.4, 3, 1.25, () => { f.pass = true; think(tr('z.pass')); });
-  zone(0.05, -1, -3, 2.4, 3, 3, () => { f.outside = true; think(tr('z.out')); });
+  zone(-5.5, -1, -1.25, -0.4, 3, 1.25, () => { f.pass = true; muse(tr('z.pass')); });
+  zone(0.05, -1, -3, 2.4, 3, 3, () => { f.outside = true; muse(tr('z.out')); });
   zone(4.8, 0.8, -0.6, 6.3, 3.5, 0.6, say1('z.stairs'));
   zone(8.7, 2.4, -7, 12.2, 6, 7, say1('z.deck'));
-  zone(12.7, 2.4, -5.5, 24.5, 6, 5.5, () => { f.store = true; updateHUD(); think(tr('z.store')); });
-  zone(8.7, 2.4, -7, 12.2, 6, 7, () => { if (!f.paid) return false; think(tr(f.bag ? 'z.leaveBag' : 'z.leaveHands')); return true; }, false);
-  zone(-8.2, -1, -4, -0.3, 3, 22, () => { if (!f.paid) return false; think(tr('z.almost')); return true; }, false);
-  zone(-5.5, -1, 9.2, -0.25, 3, 15, () => { if (!f.paid) return false; f.home = true; updateHUD(); think(tr('z.home')); return true; }, false);
+  zone(12.7, 2.4, -5.5, 24.5, 6, 5.5, () => { f.store = true; updateHUD(); muse(tr('z.store')); });
+  zone(8.7, 2.4, -7, 12.2, 6, 7, () => { if (!f.paid) return false; muse(tr(f.bag ? 'z.leaveBag' : 'z.leaveHands')); return true; }, false);
+  zone(-8.2, -1, -4, -0.3, 3, 22, () => { if (!f.paid) return false; muse(tr('z.almost')); return true; }, false);
+  zone(-5.5, -1, 9.2, -0.25, 3, 15, () => { if (!f.paid) return false; f.home = true; updateHUD(); muse(tr('z.home')); return true; }, false);
 }
 function checkZones() {
   const x = P.x, y = P.y + 0.9, z = P.z;
@@ -2027,9 +2041,9 @@ function startGame() {
   updatePlayer(0.016);
   setTimeout(() => fadeTo(0), 80);
   lockPointer();
-  think(tr('intro.1'));
-  think(tr('intro.2'));
-  think(tr('intro.3'));
+  muse(tr('intro.1'), Infinity);
+  muse(tr('intro.2'), Infinity);
+  muse(tr('intro.3'), Infinity);
   setTimeout(() => { S.flags.intro = true; updateHUD(); }, 7500);
   updateHUD();
 }
@@ -2128,9 +2142,9 @@ function frame(now) {
     checkZones();
     S.play += dt;
     if (!inside && P.pitch < -0.85 && !S.flags.lookedDown && S.flags.outside) { S.flags.lookedDown = true; think(tr('z.lookDown')); }
-    for (const h of HINTS) if (!h[3] && S.play > h[0] && h[1]()) { h[3] = true; think(tr(h[2])); }
+    for (const h of HINTS) if (!h[3] && S.play > h[0] && h[1]()) { h[3] = true; muse(tr(h[2])); }
   }
-  if (thoughtT > 0) { thoughtT -= dt; if (thoughtT <= 0) nextThought(); }
+  if (thoughtT > 0) { thoughtT -= Math.min(raw, 0.25); if (thoughtT <= 0) nextThought(); } // реальное время, а не игровое
   clockAcc += dt;
   if (clockAcc > 0.5) { clockAcc = 0; const m = 18 * 60 + 40 + Math.floor(S.play / 8); UI.clock.textContent = `${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, '0')}`; }
   updateFocus();
@@ -2157,7 +2171,7 @@ async function boot(data) {
   setTimeout(() => fadeTo(0), 60);
   window.__f5k = { S, P, camera, scene, renderer, snow: () => snow, zones, colliders, start: startGame, interact, focus: () => focus && focus.lbl,
     tp(x, y, z, yaw = P.yaw, pitch = 0) { Object.assign(P, { x, y, z, yaw, pitch, eyeY: y + 1.62, vy: 0 }); },
-    say: () => UI.thought.textContent, choose, advance, doors: () => ({ aptDoor, extDoor }), storeDoor: () => storeDoor,
+    say: () => UI.thought.textContent, think, muse, thoughtQ, nextThought, choose, advance, doors: () => ({ aptDoor, extDoor }), storeDoor: () => storeDoor,
     audio: { initAudio, sfx, updateAudio, scheduleMusic, AU },
     sim(code, n, dt = 0.05) { keys[code] = true; for (let i = 0; i < n; i++) updatePlayer(dt); keys[code] = false; return { x: +P.x.toFixed(2), y: +P.y.toFixed(2), z: +P.z.toFixed(2), surf: P.surf }; } };
 }
