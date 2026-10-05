@@ -79,6 +79,9 @@ kbd { font-family: var(--font-mono); font-size: 12px; padding: 1px 7px; border: 
 #t-act { right: calc(28px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); border-color: var(--accent) !important; }
 #t-run { right: calc(104px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); font-size: 12px !important; }
 #t-run.on { background: rgba(199,125,255,.3); }
+#touch #t-pause { top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); width: 44px; height: 44px; font-size: 13px; letter-spacing: .1em; }
+:root.touch #inv { top: calc(70px + env(safe-area-inset-top, 0px)); }
+#dialog { cursor: pointer; } #dialog .opts { cursor: default; }
 
 /* Экраны */
 .screen { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
@@ -138,7 +141,7 @@ kbd { font-family: var(--font-mono); font-size: 12px; padding: 1px 7px; border: 
     <div id="prompt" hidden><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
     <div id="thought"></div>
     <div id="dialog" hidden><div class="who"></div><div class="text"></div><div class="opts"></div><div class="cont"></div></div>
-    <div id="touch" hidden><div id="stick"><div id="knob"></div></div><button id="t-act" type="button">E</button><button id="t-run" type="button" data-i18n="touch.run">Бег</button></div>
+    <div id="touch" hidden><div id="stick"><div id="knob"></div></div><button id="t-act" type="button">E</button><button id="t-run" type="button" data-i18n="touch.run">Бег</button><button id="t-pause" type="button" aria-label="Пауза" data-i18n-aria="pause.eyebrow">II</button></div>
   </div>
   <div id="fade" class="fx"></div>
   <section id="title" class="screen">
@@ -1809,9 +1812,15 @@ addEventListener('mouseup', () => {
   if (mouseDown && !locked && !touchMode && dragMoved < 6) { if (S.phase === 'play') interact(); else if (S.phase === 'dialog') advance(); }
   mouseDown = false;
 });
-let stickId = null, stickO = [0, 0], stickV = [0, 0], lookId = null, lookL = [0, 0], lookS = [0, 0, 0];
+// Тач: левая часть экрана — джойстик, правая — обзор, короткий тап — действие.
+// Во время диалога любое касание — это «дальше»: раньше тап по левой половине уходил в джойстик,
+// а тап по самой плашке диалога до канваса не доходил, и из реплики без вариантов было не выйти.
+let stickId = null, stickO = [0, 0], stickV = [0, 0], lookId = null, lookL = [0, 0], lookS = [0, 0, 0], tapId = null, tapS = [0, 0, 0];
+const isTap = (t, s0) => Math.hypot(t.clientX - s0[0], t.clientY - s0[1]) < 12 && performance.now() - s0[2] < 350;
+function releaseStick() { stickId = null; stickV = [0, 0]; UI.knob.style.transform = ''; }
 cvs.addEventListener('touchstart', e => {
   for (const t of e.changedTouches) {
+    if (S.phase === 'dialog') { if (tapId === null) { tapId = t.identifier; tapS = [t.clientX, t.clientY, performance.now()]; } continue; }
     if (t.clientX < innerWidth * 0.45 && stickId === null) { stickId = t.identifier; stickO = [t.clientX, t.clientY]; }
     else if (lookId === null) { lookId = t.identifier; lookL = [t.clientX, t.clientY]; lookS = [t.clientX, t.clientY, performance.now()]; }
   }
@@ -1828,13 +1837,16 @@ cvs.addEventListener('touchmove', e => {
 }, { passive: false });
 cvs.addEventListener('touchend', e => {
   for (const t of e.changedTouches) {
-    if (t.identifier === stickId) { stickId = null; stickV = [0, 0]; UI.knob.style.transform = ''; }
-    if (t.identifier === lookId) {
-      lookId = null;
-      if (Math.hypot(t.clientX - lookS[0], t.clientY - lookS[1]) < 12 && performance.now() - lookS[2] < 350) { if (S.phase === 'dialog') advance(); else interact(); }
-    }
+    if (t.identifier === stickId) releaseStick();
+    if (t.identifier === tapId) { tapId = null; if (isTap(t, tapS) && S.phase === 'dialog') advance(); }
+    if (t.identifier === lookId) { lookId = null; if (isTap(t, lookS)) { if (S.phase === 'dialog') advance(); else interact(); } }
   }
 });
+// система отменила касание (жест, звонок, уведомление) — отпускаем всё, иначе персонаж «залипает» в ходьбе
+cvs.addEventListener('touchcancel', () => { releaseStick(); lookId = null; tapId = null; });
+// клик или тап по самой плашке диалога — тоже «дальше» (кнопки вариантов глушат всплытие)
+UI.dialog.addEventListener('click', () => { if (S.phase === 'dialog') advance(); });
+$('t-pause').addEventListener('click', () => pause());
 $('t-act').addEventListener('click', () => { if (S.phase === 'dialog') advance(); else interact(); });
 $('t-run').addEventListener('click', e => { runToggle = !runToggle; e.currentTarget.classList.toggle('on', runToggle); });
 
@@ -2034,6 +2046,13 @@ function fadeTo(v, instant) {
 }
 function startGame() {
   initAudio();
+  if (touchMode && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+    try {
+      document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+        .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}))
+        .catch(() => { /* не дали — играем как есть */ });
+    } catch (e) { /* старый браузер */ }
+  }
   UI.title.hidden = true; UI.hud.hidden = false; UI.touch.hidden = !touchMode;
   fadeTo(1, true);
   Object.assign(P, { x: START.x, y: 0, z: START.z, yaw: START.yaw, pitch: -0.04, eyeY: 1.62, vx: 0, vz: 0 });
@@ -2054,6 +2073,11 @@ function pause() {
 }
 function resume() { UI.pause.hidden = true; UI.hud.classList.remove('paused'); S.phase = S.prev || 'play'; initAudio(); lockPointer(); }
 $('start').addEventListener('click', startGame);
+// свернули вкладку — пауза и тишина (на телефоне звук иначе продолжает играть в фоне)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { pause(); if (AU.ctx) AU.ctx.suspend(); }
+  else if (AU.ctx) AU.ctx.resume(); // «без звука» — это громкость мастера, контекст будим всегда
+});
 $('resume').addEventListener('click', resume);
 $('again').addEventListener('click', () => location.reload());
 
@@ -2155,6 +2179,7 @@ function frame(now) {
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 async function boot(data) {
+  document.documentElement.classList.toggle('touch', touchMode);
   setLang(detectLang());
   try {
     if (document.readyState !== 'complete') await new Promise(r => { addEventListener('load', r, { once: true }); setTimeout(r, 2500); });
@@ -2171,7 +2196,7 @@ async function boot(data) {
   setTimeout(() => fadeTo(0), 60);
   window.__f5k = { S, P, camera, scene, renderer, snow: () => snow, zones, colliders, start: startGame, interact, focus: () => focus && focus.lbl,
     tp(x, y, z, yaw = P.yaw, pitch = 0) { Object.assign(P, { x, y, z, yaw, pitch, eyeY: y + 1.62, vy: 0 }); },
-    say: () => UI.thought.textContent, think, muse, thoughtQ, nextThought, choose, advance, doors: () => ({ aptDoor, extDoor }), storeDoor: () => storeDoor,
+    say: () => UI.thought.textContent, think, muse, thoughtQ, nextThought, choose, advance, doors: () => ({ aptDoor, extDoor }), storeDoor: () => storeDoor, stick: () => stickV.slice(),
     audio: { initAudio, sfx, updateAudio, scheduleMusic, AU },
     sim(code, n, dt = 0.05) { keys[code] = true; for (let i = 0; i < n; i++) updatePlayer(dt); keys[code] = false; return { x: +P.x.toFixed(2), y: +P.y.toFixed(2), z: +P.z.toFixed(2), surf: P.surf }; } };
 }
